@@ -31,8 +31,8 @@ console.log('✅ Firebase initialized - Admin Dashboard V3.0');
 // Cloudinary Configuration
 // ============================================
 
-const CLOUDINARY_CLOUD_NAME = 'dw62s0tlm'; // Ganti dengan cloud name kamu
-const CLOUDINARY_UPLOAD_PRESET = 'koyun_products'; // Buat upload preset di Cloudinary
+const CLOUDINARY_CLOUD_NAME = 'promohub'; 
+const CLOUDINARY_UPLOAD_PRESET = 'promohub';
 
 // ============================================
 // DOM Elements
@@ -547,4 +547,483 @@ function startRealtimeExpenses() {
     });
 }
 
-// Lanjut part 2... (terlalu panjang, perlu dipecah)
+
+// ============================================
+// Update Statistics with Date Filter
+// ============================================
+
+function updateStats() {
+    const filtered = getFilteredOrdersByDate();
+    
+    const pending = filtered.filter(o => o.status === 'pending').length;
+    const processing = filtered.filter(o => o.status === 'processing').length;
+    const completed = filtered.filter(o => o.status === 'completed').length;
+    const revenue = filtered
+        .filter(o => o.status === 'completed')
+        .reduce((sum, o) => sum + (o.total || 0), 0);
+    
+    // Dashboard stats
+    if (dashPending) dashPending.textContent = pending;
+    if (dashProcessing) dashProcessing.textContent = processing;
+    if (dashCompleted) dashCompleted.textContent = completed;
+    if (dashRevenue) dashRevenue.textContent = `Rp ${revenue.toLocaleString('id-ID')}`;
+    
+    // Orders section stats
+    if (statPending) statPending.textContent = pending;
+    if (statProcessing) statProcessing.textContent = processing;
+    if (statCompleted) statCompleted.textContent = completed;
+    if (statRevenue) statRevenue.textContent = `Rp ${revenue.toLocaleString('id-ID')}`;
+    if (pendingBadge) pendingBadge.textContent = pending;
+    
+    // Filter counts
+    const allFiltered = getFilteredOrdersByDate();
+    if (countAll) countAll.textContent = allFiltered.length;
+    if (countPending) countPending.textContent = allFiltered.filter(o => o.status === 'pending').length;
+    if (countProcessing) countProcessing.textContent = allFiltered.filter(o => o.status === 'processing').length;
+    if (countCompleted) countCompleted.textContent = allFiltered.filter(o => o.status === 'completed').length;
+}
+
+// ============================================
+// Get Filtered Orders by Date
+// ============================================
+
+function getFilteredOrdersByDate() {
+    const now = new Date();
+    let startDate, endDate;
+    
+    switch(state.currentDateFilter) {
+        case 'today':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            break;
+            
+        case 'yesterday':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+            break;
+            
+        case 'week':
+            const dayOfWeek = now.getDay();
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            break;
+            
+        case 'month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+            break;
+            
+        case 'custom':
+            if (!state.customDateRange.start || !state.customDateRange.end) {
+                return state.orders;
+            }
+            startDate = state.customDateRange.start;
+            endDate = state.customDateRange.end;
+            break;
+            
+        default: // 'all'
+            return state.orders;
+    }
+    
+    return state.orders.filter(order => {
+        if (!order.createdAt) return false;
+        const orderDate = order.createdAt.toDate();
+        return orderDate >= startDate && orderDate <= endDate;
+    });
+}
+
+// ============================================
+// Render Orders
+// ============================================
+
+function renderOrders() {
+    if (!ordersGrid) return;
+    
+    const dateFiltered = getFilteredOrdersByDate();
+    const filtered = state.currentFilter === 'all' 
+        ? dateFiltered 
+        : dateFiltered.filter(o => o.status === state.currentFilter);
+    
+    if (filtered.length === 0) {
+        ordersGrid.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px;">
+                <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin: 0 auto 20px; opacity: 0.3;">
+                    <circle cx="9" cy="21" r="1"></circle>
+                    <circle cx="20" cy="21" r="1"></circle>
+                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                </svg>
+                <h3 style="color: var(--text-secondary); margin-bottom: 8px;">No Orders Found</h3>
+                <p style="color: var(--text-tertiary);">No ${state.currentFilter === 'all' ? '' : state.currentFilter} orders for selected date range</p>
+            </div>
+        `;
+        return;
+    }
+    
+    ordersGrid.innerHTML = filtered.map(order => createOrderCard(order)).join('');
+}
+
+function createOrderCard(order) {
+    const time = order.createdAt ? formatTime(order.createdAt.toDate()) : 'Just now';
+    const paymentMethod = order.paymentMethod || 'cash';
+    const paymentStatus = order.paymentStatus || 'pending';
+    
+    const itemsHTML = order.items.map(item => `
+        <div class="order-item">
+            <div>
+                <div class="order-item-name">${item.name}</div>
+                <div class="order-item-qty">× ${item.quantity}</div>
+            </div>
+            <div class="order-item-price">Rp ${(item.price * item.quantity).toLocaleString('id-ID')}</div>
+        </div>
+    `).join('');
+    
+    const actionsHTML = order.status === 'pending' 
+        ? `
+            <div class="order-actions">
+                <button class="btn btn-primary" onclick="updateOrderStatus('${order.id}', 'processing')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"></path>
+                    </svg>
+                    Process
+                </button>
+                <button class="btn btn-danger" onclick="deleteOrder('${order.id}')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
+            </div>
+        `
+        : order.status === 'processing' 
+        ? `
+            <div class="order-actions">
+                <button class="btn btn-success" onclick="updateOrderStatus('${order.id}', 'completed')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    Complete
+                </button>
+                <button class="btn btn-danger" onclick="deleteOrder('${order.id}')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
+            </div>
+        `
+        : `
+            <div class="order-actions">
+                <button class="btn btn-danger" onclick="deleteOrder('${order.id}')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    Delete
+                </button>
+            </div>
+        `;
+    
+    const proofHTML = order.paymentProof && (paymentMethod === 'qris' || paymentMethod === 'transfer') 
+        ? `
+            <div class="order-proof">
+                <div class="proof-label">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                    Payment Proof
+                </div>
+                <img src="${order.paymentProof}" 
+                     alt="Payment Proof" 
+                     class="proof-image"
+                     onclick="openImageModal('${order.paymentProof}')">
+            </div>
+        `
+        : '';
+    
+    return `
+        <div class="order-card ${order.status}">
+            <div class="order-header">
+                <div>
+                    <div class="order-table">Table ${order.tableNumber}</div>
+                    <div class="order-phone">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                        </svg>
+                        ${order.customerPhone}
+                    </div>
+                    <div class="order-time">🕐 ${time}</div>
+                </div>
+                <div>
+                    <div class="order-status-badge ${order.status}">${order.status}</div>
+                    <div class="payment-badge ${paymentStatus}">${paymentStatus}</div>
+                </div>
+            </div>
+            
+            <div class="order-items">
+                ${itemsHTML}
+            </div>
+            
+            <div class="order-total">
+                <span class="order-total-label">Total</span>
+                <span class="order-total-value">Rp ${order.total.toLocaleString('id-ID')}</span>
+            </div>
+            
+            <div class="order-payment-method">
+                <span style="color: var(--text-secondary); font-size: 0.9rem;">Payment Method:</span>
+                <span class="payment-method-badge">${paymentMethod.toUpperCase()}</span>
+            </div>
+            
+            ${proofHTML}
+            ${actionsHTML}
+        </div>
+    `;
+}
+
+// ============================================
+// Render Recent Orders
+// ============================================
+
+function renderRecentOrders() {
+    if (!recentOrdersList) return;
+    
+    const recent = state.orders.slice(0, 5);
+    
+    if (recent.length === 0) {
+        recentOrdersList.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+                <p>No recent orders</p>
+            </div>
+        `;
+        return;
+    }
+    
+    recentOrdersList.innerHTML = recent.map(order => {
+        const time = order.createdAt ? formatTime(order.createdAt.toDate()) : 'Just now';
+        const statusColor = {
+            'pending': 'var(--warning)',
+            'processing': 'var(--info)',
+            'completed': 'var(--success)'
+        }[order.status] || 'var(--text-tertiary)';
+        
+        return `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; background: var(--bg-secondary); border-radius: 12px; border-left: 4px solid ${statusColor};">
+                <div>
+                    <strong style="font-size: 1.1rem; color: var(--primary);">Table ${order.tableNumber}</strong>
+                    <p style="font-size: 0.9rem; color: var(--text-secondary); margin: 4px 0;">Rp ${order.total.toLocaleString('id-ID')}</p>
+                    <small style="color: var(--text-tertiary);">${time}</small>
+                </div>
+                <div style="text-align: right;">
+                    <span style="background: ${statusColor}; color: white; padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">
+                        ${order.status}
+                    </span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ============================================
+// Order CRUD Operations
+// ============================================
+
+window.updateOrderStatus = async function(orderId, newStatus) {
+    try {
+        const orderRef = doc(db, 'orders', orderId);
+        await updateDoc(orderRef, {
+            status: newStatus,
+            updatedAt: Timestamp.now()
+        });
+        
+        showToast(`Order moved to ${newStatus}`, 'success');
+        
+    } catch (error) {
+        console.error('❌ Update error:', error);
+        showToast('Failed to update order', 'error');
+    }
+}
+
+window.deleteOrder = async function(orderId) {
+    if (!confirm('Are you sure you want to delete this order? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        await deleteDoc(doc(db, 'orders', orderId));
+        showToast('Order deleted successfully', 'success');
+        
+    } catch (error) {
+        console.error('❌ Delete error:', error);
+        showToast('Failed to delete order', 'error');
+    }
+}
+
+// ============================================
+// Render Products
+// ============================================
+
+function renderProducts() {
+    if (!productsGrid) return;
+    
+    if (state.products.length === 0) {
+        productsGrid.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px;">
+                <h3 style="color: var(--text-secondary);">No Products</h3>
+                <p style="color: var(--text-tertiary);">Click "Add Product" to create your first product</p>
+            </div>
+        `;
+        return;
+    }
+    
+    productsGrid.innerHTML = state.products.map(product => `
+        <div class="order-card">
+            <img src="${product.imageUrl || 'https://via.placeholder.com/400x300/6F4E37/FFFFFF?text=' + encodeURIComponent(product.name)}" 
+                 style="width: 100%; height: 200px; object-fit: cover; border-radius: 12px; margin-bottom: 16px;"
+                 onerror="this.src='https://via.placeholder.com/400x300/6F4E37/FFFFFF?text=No+Image'">
+            <h3 style="color: var(--primary); margin-bottom: 8px;">${product.name}</h3>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 12px;">${product.description || 'No description'}</p>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <span style="font-size: 1.5rem; font-weight: 700; color: var(--primary);">Rp ${product.price.toLocaleString('id-ID')}</span>
+                <span style="background: var(--bg-tertiary); padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; color: var(--primary);">${product.category}</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-primary" onclick="editProduct('${product.id}')" style="flex: 1;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                    Edit
+                </button>
+                <button class="btn btn-danger" onclick="deleteProduct('${product.id}')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ============================================
+// Product CRUD Operations
+// ============================================
+
+function openAddProductModal() {
+    state.editingProductId = null;
+    state.uploadedImageUrl = '';
+    if (productModalTitle) productModalTitle.textContent = 'Add New Product';
+    if (productForm) productForm.reset();
+    if (productImagePreview) productImagePreview.style.display = 'none';
+    if (productModal) productModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+window.editProduct = function(productId) {
+    const product = state.products.find(p => p.id === productId);
+    if (!product) return;
+    
+    state.editingProductId = productId;
+    state.uploadedImageUrl = product.imageUrl || '';
+    
+    if (productModalTitle) productModalTitle.textContent = 'Edit Product';
+    
+    const nameInput = document.getElementById('productName');
+    const categoryInput = document.getElementById('productCategory');
+    const priceInput = document.getElementById('productPrice');
+    const descInput = document.getElementById('productDescription');
+    const imageInput = document.getElementById('productImage');
+    
+    if (nameInput) nameInput.value = product.name;
+    if (categoryInput) categoryInput.value = product.category;
+    if (priceInput) priceInput.value = product.price;
+    if (descInput) descInput.value = product.description || '';
+    if (imageInput) imageInput.value = product.imageUrl || '';
+    
+    if (productImagePreview && product.imageUrl) {
+        productImagePreview.src = product.imageUrl;
+        productImagePreview.style.display = 'block';
+    }
+    
+    if (productModal) productModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+window.closeProductModal = function() {
+    if (productModal) productModal.classList.remove('active');
+    document.body.style.overflow = '';
+    if (productForm) productForm.reset();
+    if (productImagePreview) productImagePreview.style.display = 'none';
+    state.editingProductId = null;
+    state.uploadedImageUrl = '';
+}
+
+async function handleSaveProduct() {
+    const nameInput = document.getElementById('productName');
+    const categoryInput = document.getElementById('productCategory');
+    const priceInput = document.getElementById('productPrice');
+    const descInput = document.getElementById('productDescription');
+    
+    const name = nameInput ? nameInput.value.trim() : '';
+    const category = categoryInput ? categoryInput.value : '';
+    const price = priceInput ? parseInt(priceInput.value) : 0;
+    const description = descInput ? descInput.value.trim() : '';
+    const imageUrl = state.uploadedImageUrl;
+    
+    if (!name || !category || !price) {
+        showToast('Please fill all required fields', 'error');
+        return;
+    }
+    
+    const productData = {
+        name,
+        category,
+        price,
+        description,
+        imageUrl,
+        active: true,
+        updatedAt: Timestamp.now()
+    };
+    
+    try {
+        if (saveProductBtn) {
+            saveProductBtn.disabled = true;
+            saveProductBtn.textContent = 'Saving...';
+        }
+        
+        if (state.editingProductId) {
+            await updateDoc(doc(db, 'products', state.editingProductId), productData);
+            showToast('Product updated successfully', 'success');
+        } else {
+            productData.createdAt = Timestamp.now();
+            await addDoc(collection(db, 'products'), productData);
+            showToast('Product added successfully', 'success');
+        }
+        
+        closeProductModal();
+        
+    } catch (error) {
+        console.error('❌ Save product error:', error);
+        showToast('Failed to save product', 'error');
+    } finally {
+        if (saveProductBtn) {
+            saveProductBtn.disabled = false;
+            saveProductBtn.textContent = 'Save Product';
+        }
+    }
+}
+
+window.deleteProduct = async function(productId) {
+    if (!confirm('Delete this product? This cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        await deleteDoc(doc(db, 'products', productId));
+        showToast('Product deleted', 'success');
+    } catch (error) {
+        console.error('❌ Delete product error:', error);
+        showToast('Failed to delete product', 'error');
+    }
+}

@@ -1,6 +1,6 @@
 /* ============================================
-   KoYun Coffee V2.0 - Kasir Dashboard Logic
-   Real-time Order Management
+   KoYun Coffee V3.0 - Kasir Dashboard
+   Real-time Orders with Sound Notifications
    PRODUCTION VERSION - PERFECT
    ============================================ */
 
@@ -25,7 +25,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-console.log('✅ Firebase initialized - Kasir Dashboard');
+console.log('✅ Firebase initialized - Kasir Dashboard V3.0');
 
 // ============================================
 // DOM Elements
@@ -78,6 +78,11 @@ const modalImage = document.getElementById('modalImage');
 // Time Display
 const currentTime = document.getElementById('currentTime');
 
+// Notification Settings
+const notificationToggle = document.getElementById('notificationToggle');
+const soundToggle = document.getElementById('soundToggle');
+const volumeControl = document.getElementById('volumeControl');
+
 // ============================================
 // State Management
 // ============================================
@@ -88,8 +93,144 @@ let state = {
     orders: [],
     currentFilter: 'all',
     currentSection: 'orders',
-    unsubscribe: null
+    unsubscribe: null,
+    previousOrderCount: 0,
+    notificationEnabled: true,
+    soundEnabled: true,
+    volume: 0.5,
+    lastOrderId: null
 };
+
+// ============================================
+// Notification Sound (Multiple Options)
+// ============================================
+
+// Option 1: Simple Beep (Web Audio API)
+function createNotificationSound() {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+    
+    gainNode.gain.setValueAtTime(state.volume, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.5);
+}
+
+// Option 2: Pleasant Bell Sound
+function playNotificationBell() {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Create multiple oscillators for a bell-like sound
+    const frequencies = [800, 1000, 1200];
+    
+    frequencies.forEach((freq, index) => {
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
+        
+        const startVolume = state.volume / (index + 1);
+        gainNode.gain.setValueAtTime(startVolume, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
+        
+        oscillator.start(audioContext.currentTime + (index * 0.1));
+        oscillator.stop(audioContext.currentTime + 1 + (index * 0.1));
+    });
+}
+
+// Option 3: Using HTML5 Audio with Data URI (Ding sound)
+function playNotificationDing() {
+    try {
+        // Simple ding sound as base64
+        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYJGGm98OScTgwOUKXh8LJnHgU2jdXzzn0vBSp+zPDbl0AKFF626+qrVxQKR6Hh8r1vIwUrgc7y2Yk3CRhqvPDjnE0LDk+k4e+yaCEFNo3V88+BLwUrfs3v2JNPBRMBAQA=');
+        audio.volume = state.volume;
+        audio.play().catch(e => console.log('Audio play failed:', e));
+    } catch (error) {
+        console.log('Sound notification not available');
+    }
+}
+
+// Main notification function
+function playNotificationSound() {
+    if (!state.soundEnabled) return;
+    
+    // Use bell sound (most pleasant)
+    playNotificationBell();
+}
+
+// ============================================
+// Browser Notification
+// ============================================
+
+async function requestNotificationPermission() {
+    if (!('Notification' in window)) {
+        console.log('Browser does not support notifications');
+        return;
+    }
+    
+    if (Notification.permission === 'granted') {
+        state.notificationEnabled = true;
+    } else if (Notification.permission !== 'denied') {
+        const permission = await Notification.requestPermission();
+        state.notificationEnabled = permission === 'granted';
+    }
+}
+
+function showBrowserNotification(order) {
+    if (!state.notificationEnabled) return;
+    if (Notification.permission !== 'granted') return;
+    
+    const notification = new Notification('🔔 New Order!', {
+        body: `Table ${order.tableNumber} - Rp ${order.total.toLocaleString('id-ID')}`,
+        icon: '/images/logo.png', // Ganti dengan logo kamu
+        badge: '/images/badge.png',
+        tag: 'new-order',
+        requireInteraction: false,
+        silent: false
+    });
+    
+    notification.onclick = function() {
+        window.focus();
+        notification.close();
+    };
+    
+    setTimeout(() => notification.close(), 5000);
+}
+
+// ============================================
+// Visual Notification Badge
+// ============================================
+
+function showVisualNotification() {
+    // Flash the pending badge
+    if (pendingBadge) {
+        pendingBadge.classList.add('pulse');
+        setTimeout(() => pendingBadge.classList.remove('pulse'), 2000);
+    }
+    
+    // Flash the page title
+    let flashCount = 0;
+    const flashInterval = setInterval(() => {
+        document.title = flashCount % 2 === 0 ? '🔔 NEW ORDER!' : 'KoYun Kasir';
+        flashCount++;
+        if (flashCount >= 6) {
+            clearInterval(flashInterval);
+            document.title = 'KoYun Kasir';
+        }
+    }, 500);
+}
 
 // ============================================
 // Authentication & Role Check
@@ -106,7 +247,6 @@ onAuthStateChanged(auth, async (user) => {
     state.user = user;
     
     try {
-        // Get user document by UID
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
         
@@ -125,7 +265,6 @@ onAuthStateChanged(auth, async (user) => {
         
         console.log('👤 User role:', state.userRole);
         
-        // Check if user is staff (kasir or admin)
         if (state.userRole !== 'kasir' && state.userRole !== 'admin') {
             console.warn('⚠️ Access denied: Not staff');
             showToast('Access denied. Staff only.', 'error');
@@ -136,7 +275,6 @@ onAuthStateChanged(auth, async (user) => {
             return;
         }
         
-        // If admin tries to access kasir page, redirect to admin dashboard
         if (state.userRole === 'admin') {
             console.log('🔄 Admin detected, redirecting to admin dashboard...');
             showToast('Redirecting to Admin Dashboard...', 'info');
@@ -146,7 +284,6 @@ onAuthStateChanged(auth, async (user) => {
             return;
         }
         
-        // Check if active
         if (userData.active === false) {
             console.warn('⚠️ Account disabled');
             showToast('Account is disabled.', 'error');
@@ -157,11 +294,9 @@ onAuthStateChanged(auth, async (user) => {
             return;
         }
         
-        // Set user info
         userName.textContent = userData.name || user.email.split('@')[0];
         userRole.textContent = 'Kasir';
         
-        // Initialize app
         initApp();
         
     } catch (error) {
@@ -179,23 +314,28 @@ onAuthStateChanged(auth, async (user) => {
 // ============================================
 
 async function initApp() {
-    console.log('🚀 Initializing kasir dashboard...');
+    console.log('🚀 Initializing kasir dashboard V3.0...');
     
-    // Hide loading, show app
     setTimeout(() => {
         loadingScreen.style.display = 'none';
         appContainer.style.display = 'flex';
     }, 1000);
     
+    // Request notification permission
+    await requestNotificationPermission();
+    
     // Start real-time listeners
     startRealtimeOrders();
     
-    // Update time every second
+    // Update time
     updateTime();
     setInterval(updateTime, 1000);
     
     // Event listeners
     setupEventListeners();
+    
+    // Load saved preferences
+    loadNotificationPreferences();
 }
 
 // ============================================
@@ -203,14 +343,18 @@ async function initApp() {
 // ============================================
 
 function setupEventListeners() {
-    // Sidebar toggle (mobile)
-    menuToggle.addEventListener('click', () => {
-        sidebar.classList.add('active');
-    });
+    // Sidebar toggle
+    if (menuToggle) {
+        menuToggle.addEventListener('click', () => {
+            sidebar.classList.add('active');
+        });
+    }
     
-    closeSidebar.addEventListener('click', () => {
-        sidebar.classList.remove('active');
-    });
+    if (closeSidebar) {
+        closeSidebar.addEventListener('click', () => {
+            sidebar.classList.remove('active');
+        });
+    }
     
     // Navigation
     navItems.forEach(item => {
@@ -219,7 +363,6 @@ function setupEventListeners() {
             const section = item.dataset.section;
             switchSection(section);
             
-            // Close sidebar on mobile
             if (window.innerWidth <= 1024) {
                 sidebar.classList.remove('active');
             }
@@ -240,21 +383,91 @@ function setupEventListeners() {
     });
     
     // Refresh button
-    refreshBtn.addEventListener('click', () => {
-        refreshBtn.style.transform = 'rotate(360deg)';
-        setTimeout(() => {
-            refreshBtn.style.transform = '';
-        }, 500);
-        
-        showToast('Data refreshed', 'success');
-    });
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            refreshBtn.style.transform = 'rotate(360deg)';
+            setTimeout(() => {
+                refreshBtn.style.transform = '';
+            }, 500);
+            
+            showToast('Data refreshed', 'success');
+        });
+    }
     
     // Logout
-    logoutBtn.addEventListener('click', handleLogout);
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
     
     // Generate Report
     if (generateReport) {
         generateReport.addEventListener('click', handleGenerateReport);
+    }
+    
+    // Notification settings
+    if (notificationToggle) {
+        notificationToggle.addEventListener('change', (e) => {
+            state.notificationEnabled = e.target.checked;
+            saveNotificationPreferences();
+            showToast(`Browser notifications ${e.target.checked ? 'enabled' : 'disabled'}`, 'info');
+        });
+    }
+    
+    if (soundToggle) {
+        soundToggle.addEventListener('change', (e) => {
+            state.soundEnabled = e.target.checked;
+            saveNotificationPreferences();
+            showToast(`Sound alerts ${e.target.checked ? 'enabled' : 'disabled'}`, 'info');
+            
+            // Test sound when enabled
+            if (e.target.checked) {
+                playNotificationSound();
+            }
+        });
+    }
+    
+    if (volumeControl) {
+        volumeControl.addEventListener('input', (e) => {
+            state.volume = parseFloat(e.target.value);
+            saveNotificationPreferences();
+        });
+        
+        volumeControl.addEventListener('change', () => {
+            // Test sound on volume change
+            if (state.soundEnabled) {
+                playNotificationSound();
+            }
+        });
+    }
+}
+
+// ============================================
+// Notification Preferences
+// ============================================
+
+function saveNotificationPreferences() {
+    localStorage.setItem('kasir_notifications', JSON.stringify({
+        notificationEnabled: state.notificationEnabled,
+        soundEnabled: state.soundEnabled,
+        volume: state.volume
+    }));
+}
+
+function loadNotificationPreferences() {
+    try {
+        const saved = localStorage.getItem('kasir_notifications');
+        if (saved) {
+            const prefs = JSON.parse(saved);
+            state.notificationEnabled = prefs.notificationEnabled ?? true;
+            state.soundEnabled = prefs.soundEnabled ?? true;
+            state.volume = prefs.volume ?? 0.5;
+            
+            if (notificationToggle) notificationToggle.checked = state.notificationEnabled;
+            if (soundToggle) soundToggle.checked = state.soundEnabled;
+            if (volumeControl) volumeControl.value = state.volume;
+        }
+    } catch (error) {
+        console.log('Could not load preferences:', error);
     }
 }
 
@@ -265,7 +478,6 @@ function setupEventListeners() {
 function switchSection(section) {
     state.currentSection = section;
     
-    // Update navigation
     navItems.forEach(item => {
         if (item.dataset.section === section) {
             item.classList.add('active');
@@ -274,14 +486,12 @@ function switchSection(section) {
         }
     });
     
-    // Update page title
     const titles = {
         'orders': 'Orders Management',
         'reports': 'Sales Reports'
     };
     pageTitle.textContent = titles[section];
     
-    // Show/hide sections
     if (section === 'orders') {
         ordersSection.classList.add('active');
         if (reportsSection) reportsSection.classList.remove('active');
@@ -292,7 +502,7 @@ function switchSection(section) {
 }
 
 // ============================================
-// Real-time Orders Listener
+// Real-time Orders Listener with Notification
 // ============================================
 
 function startRealtimeOrders() {
@@ -303,7 +513,6 @@ function startRealtimeOrders() {
         orderBy('createdAt', 'desc')
     );
     
-    // Unsubscribe from previous listener if exists
     if (state.unsubscribe) {
         state.unsubscribe();
     }
@@ -311,18 +520,46 @@ function startRealtimeOrders() {
     state.unsubscribe = onSnapshot(q, (snapshot) => {
         console.log('📡 Real-time update received:', snapshot.size, 'orders');
         
-        state.orders = snapshot.docs.map(doc => ({
+        const newOrders = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
         }));
         
+        // Detect new orders
+        const changes = snapshot.docChanges();
+        const hasNewOrder = changes.some(change => change.type === 'added');
+        
+        if (hasNewOrder && state.orders.length > 0) {
+            // Get the newest order
+            const newestOrder = newOrders[0];
+            
+            // Only notify if it's a different order than last time
+            if (newestOrder.id !== state.lastOrderId) {
+                console.log('🔔 NEW ORDER DETECTED!', newestOrder.id);
+                
+                // Play sound
+                playNotificationSound();
+                
+                // Show visual notification
+                showVisualNotification();
+                
+                // Show browser notification
+                showBrowserNotification(newestOrder);
+                
+                // Show toast
+                showToast(`New order from Table ${newestOrder.tableNumber}!`, 'success');
+                
+                // Update last order ID
+                state.lastOrderId = newestOrder.id;
+            }
+        }
+        
+        state.orders = newOrders;
+        state.previousOrderCount = newOrders.length;
+        
         updateStats();
         renderOrders();
         
-        // Play sound for new orders (optional)
-        if (snapshot.docChanges().some(change => change.type === 'added')) {
-            playNotificationSound();
-        }
     }, (error) => {
         console.error('❌ Real-time listener error:', error);
         showToast('Failed to load orders', 'error');
@@ -350,17 +587,17 @@ function updateStats() {
         .filter(o => o.status === 'completed')
         .reduce((sum, o) => sum + (o.total || 0), 0);
     
-    statPending.textContent = pending;
-    statProcessing.textContent = processing;
-    statCompleted.textContent = completed;
-    statRevenue.textContent = `Rp ${revenue.toLocaleString('id-ID')}`;
-    pendingBadge.textContent = pending;
+    if (statPending) statPending.textContent = pending;
+    if (statProcessing) statProcessing.textContent = processing;
+    if (statCompleted) statCompleted.textContent = completed;
+    if (statRevenue) statRevenue.textContent = `Rp ${revenue.toLocaleString('id-ID')}`;
+    if (pendingBadge) pendingBadge.textContent = pending;
     
     // Update filter counts
-    countAll.textContent = state.orders.length;
-    countPending.textContent = state.orders.filter(o => o.status === 'pending').length;
-    countProcessing.textContent = state.orders.filter(o => o.status === 'processing').length;
-    countCompleted.textContent = state.orders.filter(o => o.status === 'completed').length;
+    if (countAll) countAll.textContent = state.orders.length;
+    if (countPending) countPending.textContent = state.orders.filter(o => o.status === 'pending').length;
+    if (countProcessing) countProcessing.textContent = state.orders.filter(o => o.status === 'processing').length;
+    if (countCompleted) countCompleted.textContent = state.orders.filter(o => o.status === 'completed').length;
 }
 
 // ============================================
@@ -661,7 +898,6 @@ async function handleLogout() {
     if (!confirm('Logout from dashboard?')) return;
     
     try {
-        // Unsubscribe listener
         if (state.unsubscribe) {
             state.unsubscribe();
         }
@@ -709,17 +945,6 @@ function formatTime(date) {
     });
 }
 
-function playNotificationSound() {
-    // Optional: Play notification sound for new orders
-    try {
-        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYJGGm98OScTgwOUKXh8LJnHgU2jdXzzn0vBSp+zPDbl0AKFF626+qrVxQKR6Hh8r1vIwUrgc7y2Yk3CRhqvPDjnE0LDk+k4e+yaCEFNo3V88+BLwUrfs3v2JNPBRMBAQA=');
-        audio.volume = 0.3;
-        audio.play().catch(e => console.log('Sound play failed:', e));
-    } catch (error) {
-        console.log('Sound notification not available');
-    }
-}
-
 function showToast(message, type = 'info') {
     const colors = {
         success: '#2ECC71',
@@ -762,7 +987,14 @@ styleAnimations.textContent = `
         from { transform: translateX(0); opacity: 1; }
         to { transform: translateX(400px); opacity: 0; }
     }
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.2); }
+    }
+    .pulse {
+        animation: pulse 0.5s ease-in-out 3;
+    }
 `;
 document.head.appendChild(styleAnimations);
 
-console.log('✅ Kasir Dashboard V2.0 initialized');
+console.log('✅ Kasir Dashboard V3.0 initialized with notifications');

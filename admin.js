@@ -156,7 +156,7 @@ let state = {
 onAuthStateChanged(auth, async (user) => {
     if (!user) {
         console.log('❌ No user authenticated');
-        window.location.href = '/admin.html';
+        window.location.href = '/index.html';
         return;
     }
 
@@ -172,7 +172,7 @@ onAuthStateChanged(auth, async (user) => {
             showToast('User data not found. Contact admin.', 'error');
             setTimeout(() => {
                 signOut(auth);
-                window.location.href = '/admin.html';
+                window.location.href = '/index.html';
             }, 2000);
             return;
         }
@@ -194,7 +194,7 @@ onAuthStateChanged(auth, async (user) => {
             showToast('Account is disabled.', 'error');
             setTimeout(() => {
                 signOut(auth);
-                window.location.href = '/admin.html';
+                window.location.href = '/index.html';
             }, 2000);
             return;
         }
@@ -209,7 +209,7 @@ onAuthStateChanged(auth, async (user) => {
         showToast('Authentication error. Please login again.', 'error');
         setTimeout(() => {
             signOut(auth);
-            window.location.href = '/admin.html';
+            window.location.href = '/index.html';
         }, 2000);
     }
 });

@@ -1,10 +1,11 @@
 /* ============================================
    KoYun Coffee V2.0 - Kasir Dashboard Logic
    Real-time Order Management
+   PRODUCTION VERSION - PERFECT
    ============================================ */
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { getFirestore, collection, query, where, getDocs, doc, updateDoc, onSnapshot, orderBy, Timestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { getFirestore, collection, query, getDocs, doc, getDoc, updateDoc, onSnapshot, orderBy, Timestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { getAuth, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
 // ============================================
@@ -24,7 +25,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-console.log('✅ Firebase initialized');
+console.log('✅ Firebase initialized - Kasir Dashboard');
 
 // ============================================
 // DOM Elements
@@ -83,6 +84,7 @@ const currentTime = document.getElementById('currentTime');
 
 let state = {
     user: null,
+    userRole: null,
     orders: [],
     currentFilter: 'all',
     currentSection: 'orders',
@@ -90,18 +92,85 @@ let state = {
 };
 
 // ============================================
-// Authentication Check
+// Authentication & Role Check
 // ============================================
 
-onAuthStateChanged(auth, (user) => {
-    if (user) {
-        console.log('✅ User authenticated:', user.email);
-        state.user = user;
-        userName.textContent = user.email.split('@')[0];
-        initApp();
-    } else {
+onAuthStateChanged(auth, async (user) => {
+    if (!user) {
         console.log('❌ No user authenticated');
         window.location.href = '/admin.html';
+        return;
+    }
+
+    console.log('✅ User authenticated:', user.email);
+    state.user = user;
+    
+    try {
+        // Get user document by UID
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        
+        if (!userDocSnap.exists()) {
+            console.error('❌ User document not found');
+            showToast('User data not found. Contact admin.', 'error');
+            setTimeout(() => {
+                signOut(auth);
+                window.location.href = '/admin.html';
+            }, 2000);
+            return;
+        }
+        
+        const userData = userDocSnap.data();
+        state.userRole = userData.role || 'kasir';
+        
+        console.log('👤 User role:', state.userRole);
+        
+        // Check if user is staff (kasir or admin)
+        if (state.userRole !== 'kasir' && state.userRole !== 'admin') {
+            console.warn('⚠️ Access denied: Not staff');
+            showToast('Access denied. Staff only.', 'error');
+            setTimeout(() => {
+                signOut(auth);
+                window.location.href = '/admin.html';
+            }, 2000);
+            return;
+        }
+        
+        // If admin tries to access kasir page, redirect to admin dashboard
+        if (state.userRole === 'admin') {
+            console.log('🔄 Admin detected, redirecting to admin dashboard...');
+            showToast('Redirecting to Admin Dashboard...', 'info');
+            setTimeout(() => {
+                window.location.href = '/dashboard-admin.html';
+            }, 1000);
+            return;
+        }
+        
+        // Check if active
+        if (userData.active === false) {
+            console.warn('⚠️ Account disabled');
+            showToast('Account is disabled.', 'error');
+            setTimeout(() => {
+                signOut(auth);
+                window.location.href = '/admin.html';
+            }, 2000);
+            return;
+        }
+        
+        // Set user info
+        userName.textContent = userData.name || user.email.split('@')[0];
+        userRole.textContent = 'Kasir';
+        
+        // Initialize app
+        initApp();
+        
+    } catch (error) {
+        console.error('❌ Auth check error:', error);
+        showToast('Authentication error. Please login again.', 'error');
+        setTimeout(() => {
+            signOut(auth);
+            window.location.href = '/admin.html';
+        }, 2000);
     }
 });
 
@@ -110,7 +179,7 @@ onAuthStateChanged(auth, (user) => {
 // ============================================
 
 async function initApp() {
-    console.log('🚀 Initializing dashboard...');
+    console.log('🚀 Initializing kasir dashboard...');
     
     // Hide loading, show app
     setTimeout(() => {
@@ -177,7 +246,6 @@ function setupEventListeners() {
             refreshBtn.style.transform = '';
         }, 500);
         
-        loadOrders();
         showToast('Data refreshed', 'success');
     });
     
@@ -185,7 +253,9 @@ function setupEventListeners() {
     logoutBtn.addEventListener('click', handleLogout);
     
     // Generate Report
-    generateReport.addEventListener('click', handleGenerateReport);
+    if (generateReport) {
+        generateReport.addEventListener('click', handleGenerateReport);
+    }
 }
 
 // ============================================
@@ -214,10 +284,10 @@ function switchSection(section) {
     // Show/hide sections
     if (section === 'orders') {
         ordersSection.classList.add('active');
-        reportsSection.classList.remove('active');
+        if (reportsSection) reportsSection.classList.remove('active');
     } else if (section === 'reports') {
         ordersSection.classList.remove('active');
-        reportsSection.classList.add('active');
+        if (reportsSection) reportsSection.classList.add('active');
     }
 }
 
@@ -257,11 +327,6 @@ function startRealtimeOrders() {
         console.error('❌ Real-time listener error:', error);
         showToast('Failed to load orders', 'error');
     });
-}
-
-function loadOrders() {
-    // Manual refresh (already handled by real-time listener)
-    console.log('🔄 Manual refresh triggered');
 }
 
 // ============================================
@@ -445,13 +510,132 @@ window.updateOrderStatus = async function(orderId, newStatus) {
             updatedAt: Timestamp.now()
         });
         
-        console.log('✅ Order updated successfully');
+        console.log('✅ Order updated');
         showToast(`Order moved to ${newStatus}`, 'success');
         
     } catch (error) {
         console.error('❌ Update error:', error);
         showToast('Failed to update order', 'error');
     }
+}
+
+// ============================================
+// Generate Report
+// ============================================
+
+function handleGenerateReport() {
+    const period = reportPeriod.value;
+    const data = getFilteredOrders(period);
+    
+    if (data.length === 0) {
+        reportContent.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px; color: var(--text-tertiary);">
+                <h3>No data available</h3>
+                <p>No orders found for the selected period</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const totalRevenue = data
+        .filter(o => o.status === 'completed')
+        .reduce((sum, o) => sum + (o.total || 0), 0);
+    
+    const totalOrders = data.length;
+    const completedOrders = data.filter(o => o.status === 'completed').length;
+    
+    reportContent.innerHTML = `
+        <div style="margin-bottom: 30px;">
+            <h3 style="color: var(--primary); margin-bottom: 20px;">Report Summary - ${formatPeriodName(period)}</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
+                <div style="background: var(--bg-secondary); padding: 20px; border-radius: 12px;">
+                    <p style="color: var(--text-secondary); margin-bottom: 8px;">Total Orders</p>
+                    <h2 style="color: var(--primary); font-size: 2rem;">${totalOrders}</h2>
+                </div>
+                <div style="background: var(--bg-secondary); padding: 20px; border-radius: 12px;">
+                    <p style="color: var(--text-secondary); margin-bottom: 8px;">Completed</p>
+                    <h2 style="color: var(--success); font-size: 2rem;">${completedOrders}</h2>
+                </div>
+                <div style="background: var(--bg-secondary); padding: 20px; border-radius: 12px;">
+                    <p style="color: var(--text-secondary); margin-bottom: 8px;">Total Revenue</p>
+                    <h2 style="color: var(--primary); font-size: 2rem;">Rp ${totalRevenue.toLocaleString('id-ID')}</h2>
+                </div>
+            </div>
+        </div>
+        
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: var(--bg-secondary);">
+                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid var(--primary);">Date</th>
+                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid var(--primary);">Table</th>
+                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid var(--primary);">Items</th>
+                    <th style="padding: 12px; text-align: right; border-bottom: 2px solid var(--primary);">Total</th>
+                    <th style="padding: 12px; text-align: center; border-bottom: 2px solid var(--primary);">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${data.map(order => {
+                    const date = order.createdAt ? order.createdAt.toDate().toLocaleString('id-ID', { 
+                        day: 'numeric', 
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    }) : 'N/A';
+                    const items = order.items.map(i => `${i.name} (${i.quantity}x)`).join(', ');
+                    const statusColor = {
+                        'pending': 'var(--warning)',
+                        'processing': 'var(--info)',
+                        'completed': 'var(--success)'
+                    }[order.status];
+                    
+                    return `
+                        <tr style="border-bottom: 1px solid #E8E4DF;">
+                            <td style="padding: 12px;">${date}</td>
+                            <td style="padding: 12px;">Table ${order.tableNumber}</td>
+                            <td style="padding: 12px; font-size: 0.9rem; color: var(--text-secondary);">${items}</td>
+                            <td style="padding: 12px; text-align: right; font-weight: 700; color: var(--primary);">Rp ${order.total.toLocaleString('id-ID')}</td>
+                            <td style="padding: 12px; text-align: center;">
+                                <span style="background: ${statusColor}; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">
+                                    ${order.status}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+    
+    showToast('Report generated successfully', 'success');
+}
+
+function getFilteredOrders(period) {
+    const now = new Date();
+    let startDate;
+    
+    if (period === 'today') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (period === 'week') {
+        const dayOfWeek = now.getDay();
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+    } else if (period === 'month') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else {
+        return state.orders;
+    }
+    
+    return state.orders.filter(order => {
+        if (!order.createdAt) return false;
+        return order.createdAt.toDate() >= startDate;
+    });
+}
+
+function formatPeriodName(period) {
+    const now = new Date();
+    if (period === 'today') return now.toLocaleDateString('id-ID', { dateStyle: 'full' });
+    if (period === 'week') return 'This Week';
+    if (period === 'month') return now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    return 'All Time';
 }
 
 // ============================================
@@ -470,111 +654,20 @@ window.closeImageModal = function() {
 }
 
 // ============================================
-// Generate Report
-// ============================================
-
-async function handleGenerateReport() {
-    const period = reportPeriod.value;
-    
-    console.log('📊 Generating report for:', period);
-    
-    let startDate, endDate;
-    const now = new Date();
-    
-    if (period === 'today') {
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    } else if (period === 'week') {
-        const dayOfWeek = now.getDay();
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
-        endDate = new Date();
-    } else if (period === 'month') {
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        endDate = new Date();
-    }
-    
-    const filteredOrders = state.orders.filter(order => {
-        if (!order.createdAt) return false;
-        const orderDate = order.createdAt.toDate();
-        return orderDate >= startDate && orderDate < endDate;
-    });
-    
-    const totalOrders = filteredOrders.length;
-    const completedOrders = filteredOrders.filter(o => o.status === 'completed').length;
-    const totalRevenue = filteredOrders
-        .filter(o => o.status === 'completed')
-        .reduce((sum, o) => sum + (o.total || 0), 0);
-    const averageOrder = completedOrders > 0 ? totalRevenue / completedOrders : 0;
-    
-    // Payment methods breakdown
-    const cashOrders = filteredOrders.filter(o => o.paymentMethod === 'cash').length;
-    const qrisOrders = filteredOrders.filter(o => o.paymentMethod === 'qris').length;
-    const transferOrders = filteredOrders.filter(o => o.paymentMethod === 'transfer').length;
-    
-    reportContent.innerHTML = `
-        <div class="report-summary">
-            <div class="summary-card">
-                <h3>Total Orders</h3>
-                <div class="value">${totalOrders}</div>
-            </div>
-            <div class="summary-card">
-                <h3>Completed</h3>
-                <div class="value">${completedOrders}</div>
-            </div>
-            <div class="summary-card">
-                <h3>Total Revenue</h3>
-                <div class="value">Rp ${totalRevenue.toLocaleString('id-ID')}</div>
-            </div>
-            <div class="summary-card">
-                <h3>Average Order</h3>
-                <div class="value">Rp ${Math.round(averageOrder).toLocaleString('id-ID')}</div>
-            </div>
-        </div>
-        
-        <div style="background: var(--bg-tertiary); padding: var(--space-lg); border-radius: var(--radius-md); margin-top: var(--space-lg);">
-            <h3 style="margin-bottom: var(--space-md); color: var(--primary);">Payment Methods</h3>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md);">
-                <div style="text-align: center; padding: var(--space-md); background: var(--bg-primary); border-radius: var(--radius-sm);">
-                    <div style="font-size: 0.9rem; color: var(--text-tertiary); margin-bottom: 4px;">Cash</div>
-                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);">${cashOrders}</div>
-                </div>
-                <div style="text-align: center; padding: var(--space-md); background: var(--bg-primary); border-radius: var(--radius-sm);">
-                    <div style="font-size: 0.9rem; color: var(--text-tertiary); margin-bottom: 4px;">QRIS</div>
-                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);">${qrisOrders}</div>
-                </div>
-                <div style="text-align: center; padding: var(--space-md); background: var(--bg-primary); border-radius: var(--radius-sm);">
-                    <div style="font-size: 0.9rem; color: var(--text-tertiary); margin-bottom: 4px;">Transfer</div>
-                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);">${transferOrders}</div>
-                </div>
-            </div>
-        </div>
-        
-        <div style="margin-top: var(--space-xl); text-align: center;">
-            <p style="color: var(--text-tertiary); margin-bottom: var(--space-md);">Report generated for: <strong>${formatPeriod(period)}</strong></p>
-            <button onclick="window.print()" class="btn btn-primary">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                    <rect x="6" y="14" width="12" height="8"></rect>
-                </svg>
-                Print Report
-            </button>
-        </div>
-    `;
-    
-    showToast('Report generated successfully', 'success');
-}
-
-// ============================================
 // Logout
 // ============================================
 
 async function handleLogout() {
-    if (!confirm('Are you sure you want to logout?')) return;
+    if (!confirm('Logout from dashboard?')) return;
     
     try {
+        // Unsubscribe listener
+        if (state.unsubscribe) {
+            state.unsubscribe();
+        }
+        
         await signOut(auth);
-        console.log('✅ Logged out successfully');
+        console.log('✅ Logged out');
         window.location.href = '/admin.html';
     } catch (error) {
         console.error('❌ Logout error:', error);
@@ -588,15 +681,14 @@ async function handleLogout() {
 
 function updateTime() {
     const now = new Date();
-    const options = { 
+    currentTime.textContent = now.toLocaleDateString('id-ID', { 
         weekday: 'short', 
         year: 'numeric', 
         month: 'short', 
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
-    };
-    currentTime.textContent = now.toLocaleDateString('id-ID', options);
+    });
 }
 
 function formatTime(date) {
@@ -617,26 +709,23 @@ function formatTime(date) {
     });
 }
 
-function formatPeriod(period) {
-    const now = new Date();
-    if (period === 'today') return now.toLocaleDateString('id-ID', { dateStyle: 'full' });
-    if (period === 'week') return 'This Week';
-    if (period === 'month') return now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-    return period;
-}
-
 function playNotificationSound() {
-    // Optional: Play notification sound
-    // const audio = new Audio('/notification.mp3');
-    // audio.play().catch(e => console.log('Sound play failed:', e));
+    // Optional: Play notification sound for new orders
+    try {
+        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYJGGm98OScTgwOUKXh8LJnHgU2jdXzzn0vBSp+zPDbl0AKFF626+qrVxQKR6Hh8r1vIwUrgc7y2Yk3CRhqvPDjnE0LDk+k4e+yaCEFNo3V88+BLwUrfs3v2JNPBRMBAQA=');
+        audio.volume = 0.3;
+        audio.play().catch(e => console.log('Sound play failed:', e));
+    } catch (error) {
+        console.log('Sound notification not available');
+    }
 }
 
 function showToast(message, type = 'info') {
     const colors = {
-        success: 'var(--success)',
-        error: 'var(--danger)',
-        info: 'var(--info)',
-        warning: 'var(--warning)'
+        success: '#2ECC71',
+        error: '#E74C3C',
+        info: '#3498DB',
+        warning: '#F39C12'
     };
     
     const toast = document.createElement('div');
@@ -648,7 +737,7 @@ function showToast(message, type = 'info') {
         color: white;
         padding: 16px 24px;
         border-radius: 12px;
-        box-shadow: var(--shadow-xl);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.2);
         z-index: 10000;
         font-weight: 600;
         animation: slideInRight 0.3s ease-out;
@@ -662,7 +751,7 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
-// Add toast animations
+// Add animation styles
 const styleAnimations = document.createElement('style');
 styleAnimations.textContent = `
     @keyframes slideInRight {

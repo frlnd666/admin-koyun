@@ -232,10 +232,6 @@ function showVisualNotification() {
     }, 500);
 }
 
-// ============================================
-// Authentication & Role Check
-// ============================================
-
 onAuthStateChanged(auth, async (user) => {
     if (!user) {
         console.log('❌ No user authenticated');
@@ -275,6 +271,7 @@ onAuthStateChanged(auth, async (user) => {
             return;
         }
         
+        // ✅ PENTING: Admin bisa akses kasir.html, tapi auto redirect ke dashboard-admin
         if (state.userRole === 'admin') {
             console.log('🔄 Admin detected, redirecting to admin dashboard...');
             showToast('Redirecting to Admin Dashboard...', 'info');
@@ -294,6 +291,8 @@ onAuthStateChanged(auth, async (user) => {
             return;
         }
         
+        console.log('✅ Kasir access granted');
+        
         userName.textContent = userData.name || user.email.split('@')[0];
         userRole.textContent = 'Kasir';
         
@@ -306,8 +305,10 @@ onAuthStateChanged(auth, async (user) => {
             signOut(auth);
             window.location.href = '/admin.html';
         }, 2000);
+        return;
     }
 });
+
 
 // ============================================
 // Initialize App

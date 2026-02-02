@@ -629,7 +629,8 @@ function renderTables(tables) {
         return;
     }
     
-    const baseURL = window.location.origin.replace('/staff', '') + '/menu';
+    const baseURL = 'https://koyun.vercel.app'; 
+
     
     tablesGrid.innerHTML = tables.map(table => `
         <div class="qr-card">

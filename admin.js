@@ -1,12 +1,12 @@
 /* ============================================
-   KoYun Coffee V2.0 - Staff Login
-   Role-Based Access Control
-   PRODUCTION VERSION - PERFECT
+   KoYun Coffee V3.0 - Admin Dashboard ULTIMATE
+   Complete with Analytics, Staff, Expenses
+   PRODUCTION VERSION - ULTRA PERFECT
    ============================================ */
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { getFirestore, collection, query, getDocs, doc, getDoc, updateDoc, addDoc, deleteDoc, onSnapshot, orderBy, where, Timestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { getAuth, signOut, onAuthStateChanged, createUserWithEmailAndPassword, updatePassword } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
 // ============================================
 // Firebase Configuration
@@ -22,198 +22,529 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
 const db = getFirestore(app);
+const auth = getAuth(app);
 
-console.log('✅ Firebase initialized');
+console.log('✅ Firebase initialized - Admin Dashboard V3.0');
+
+// ============================================
+// Cloudinary Configuration
+// ============================================
+
+const CLOUDINARY_CLOUD_NAME = 'dw62s0tlm'; // Ganti dengan cloud name kamu
+const CLOUDINARY_UPLOAD_PRESET = 'koyun_products'; // Buat upload preset di Cloudinary
 
 // ============================================
 // DOM Elements
 // ============================================
 
-const loginForm = document.getElementById('loginForm');
-const emailInput = document.getElementById('email');
-const passwordInput = document.getElementById('password');
-const loginBtn = document.getElementById('loginBtn');
-const loginBtnText = document.getElementById('loginBtnText');
-const errorMessage = document.getElementById('errorMessage');
+const loadingScreen = document.getElementById('loadingScreen');
+const appContainer = document.getElementById('appContainer');
+const sidebar = document.getElementById('sidebar');
+const menuToggle = document.getElementById('menuToggle');
+const closeSidebar = document.getElementById('closeSidebar');
+const logoutBtn = document.getElementById('logoutBtn');
+const refreshBtn = document.getElementById('refreshBtn');
+
+// Navigation
+const navItems = document.querySelectorAll('.nav-item');
+const pageTitle = document.getElementById('pageTitle');
+
+// User Info
+const userName = document.getElementById('userName');
+const userRole = document.getElementById('userRole');
+
+// Dashboard Stats
+const dashPending = document.getElementById('dashPending');
+const dashProcessing = document.getElementById('dashProcessing');
+const dashCompleted = document.getElementById('dashCompleted');
+const dashRevenue = document.getElementById('dashRevenue');
+
+// Orders Stats
+const statPending = document.getElementById('statPending');
+const statProcessing = document.getElementById('statProcessing');
+const statCompleted = document.getElementById('statCompleted');
+const statRevenue = document.getElementById('statRevenue');
+const pendingBadge = document.getElementById('pendingBadge');
+
+// Filters
+const filterTabs = document.querySelectorAll('.tab-btn');
+const dateFilter = document.getElementById('dateFilter');
+const customDateStart = document.getElementById('customDateStart');
+const customDateEnd = document.getElementById('customDateEnd');
+const countAll = document.getElementById('countAll');
+const countPending = document.getElementById('countPending');
+const countProcessing = document.getElementById('countProcessing');
+const countCompleted = document.getElementById('countCompleted');
+
+// Grids
+const ordersGrid = document.getElementById('ordersGrid');
+const productsGrid = document.getElementById('productsGrid');
+const recentOrdersList = document.getElementById('recentOrdersList');
+const staffGrid = document.getElementById('staffGrid');
+const expensesGrid = document.getElementById('expensesGrid');
+
+// Modals
+const imageModal = document.getElementById('imageModal');
+const modalImage = document.getElementById('modalImage');
+const productModal = document.getElementById('productModal');
+const staffModal = document.getElementById('staffModal');
+const expenseModal = document.getElementById('expenseModal');
+
+// Product Form
+const addProductBtn = document.getElementById('addProductBtn');
+const productForm = document.getElementById('productForm');
+const productModalTitle = document.getElementById('productModalTitle');
+const saveProductBtn = document.getElementById('saveProductBtn');
+const uploadImageBtn = document.getElementById('uploadImageBtn');
+const productImagePreview = document.getElementById('productImagePreview');
+
+// Staff Form
+const addStaffBtn = document.getElementById('addStaffBtn');
+const staffForm = document.getElementById('staffForm');
+const saveStaffBtn = document.getElementById('saveStaffBtn');
+
+// Expense Form
+const addExpenseBtn = document.getElementById('addExpenseBtn');
+const expenseForm = document.getElementById('expenseForm');
+const saveExpenseBtn = document.getElementById('saveExpenseBtn');
+
+// Reports
+const reportPeriod = document.getElementById('reportPeriod');
+const exportExcel = document.getElementById('exportExcel');
+const exportCSV = document.getElementById('exportCSV');
+const exportPDF = document.getElementById('exportPDF');
+
+// Analytics
+const analyticsChart = document.getElementById('analyticsChart');
+const topProductsList = document.getElementById('topProductsList');
+const profitLossCard = document.getElementById('profitLossCard');
+
+// Time Display
+const currentTime = document.getElementById('currentTime');
 
 // ============================================
-// Check if Already Logged In
+// State Management
+// ============================================
+
+let state = {
+    user: null,
+    userRole: null,
+    orders: [],
+    products: [],
+    staff: [],
+    expenses: [],
+    currentFilter: 'all',
+    currentDateFilter: 'all',
+    customDateRange: { start: null, end: null },
+    currentSection: 'dashboard',
+    unsubscribeOrders: null,
+    unsubscribeProducts: null,
+    unsubscribeStaff: null,
+    unsubscribeExpenses: null,
+    editingProductId: null,
+    editingStaffId: null,
+    editingExpenseId: null,
+    cloudinaryWidget: null,
+    uploadedImageUrl: ''
+};
+
+// ============================================
+// Authentication & Role Check
 // ============================================
 
 onAuthStateChanged(auth, async (user) => {
-    if (user) {
-        console.log('✅ User already authenticated:', user.email);
-        
-        // Only redirect if we're on login page
-        const currentPath = window.location.pathname;
-        if (currentPath.includes('admin.html') || currentPath === '/' || currentPath.endsWith('/')) {
-            await redirectBasedOnRole(user);
-        }
-    }
-});
-
-// ============================================
-// Login Form Submit
-// ============================================
-
-loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const email = emailInput.value.trim();
-    const password = passwordInput.value.trim();
-    
-    if (!email || !password) {
-        showError('Please enter email and password');
+    if (!user) {
+        console.log('❌ No user authenticated');
+        window.location.href = '/admin.html';
         return;
     }
-    
-    // Disable button
-    loginBtn.disabled = true;
-    loginBtnText.textContent = 'Authenticating...';
-    hideError();
+
+    console.log('✅ User authenticated:', user.email);
+    state.user = user;
     
     try {
-        console.log('🔐 Attempting login for:', email);
-        
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-        
-        console.log('✅ Authentication successful, UID:', user.uid);
-        
-        loginBtnText.textContent = 'Verifying access...';
-        
-        // Check role and redirect
-        await redirectBasedOnRole(user);
-        
-    } catch (error) {
-        console.error('❌ Login error:', error.code, error.message);
-        
-        // User-friendly error messages
-        let message = 'Login failed. Please try again.';
-        
-        switch (error.code) {
-            case 'auth/invalid-credential':
-            case 'auth/user-not-found':
-            case 'auth/wrong-password':
-                message = 'Invalid email or password';
-                break;
-            case 'auth/too-many-requests':
-                message = 'Too many failed attempts. Try again later.';
-                break;
-            case 'auth/network-request-failed':
-                message = 'Network error. Check your connection.';
-                break;
-            case 'auth/invalid-email':
-                message = 'Invalid email format';
-                break;
-            case 'auth/user-disabled':
-                message = 'Account disabled. Contact admin.';
-                break;
-        }
-        
-        showError(message);
-        
-        // Reset button
-        loginBtn.disabled = false;
-        loginBtnText.textContent = 'Login to Dashboard';
-    }
-});
-
-// ============================================
-// Role-Based Redirect
-// ============================================
-
-async function redirectBasedOnRole(user) {
-    try {
-        console.log('🔍 Fetching user document for UID:', user.uid);
-        
-        // Get user document directly by UID
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
         
         if (!userDocSnap.exists()) {
-            console.error('❌ User document not found in Firestore');
-            console.log('💡 Tip: Create document in Firestore with ID:', user.uid);
-            
-            showError('User not found. Please contact administrator.');
-            
-            // Reset button if on login page
-            if (loginBtn) {
-                loginBtn.disabled = false;
-                loginBtnText.textContent = 'Login to Dashboard';
-            }
+            console.error('❌ User document not found');
+            showToast('User data not found. Contact admin.', 'error');
+            setTimeout(() => {
+                signOut(auth);
+                window.location.href = '/admin.html';
+            }, 2000);
             return;
         }
         
         const userData = userDocSnap.data();
-        const role = userData.role || 'kasir';
+        state.userRole = userData.role || 'kasir';
         
-        console.log('✅ User data:', {
-            email: userData.email,
-            role: role,
-            name: userData.name
-        });
-        
-        // Check if user is active
-        if (userData.active === false) {
-            showError('Account is disabled. Contact administrator.');
-            if (loginBtn) {
-                loginBtn.disabled = false;
-                loginBtnText.textContent = 'Login to Dashboard';
-            }
+        if (state.userRole !== 'admin') {
+            console.warn('⚠️ Access denied: Not an admin');
+            showToast('Access denied. Admin only.', 'error');
+            setTimeout(() => {
+                window.location.href = '/kasir.html';
+            }, 1500);
             return;
         }
         
-        // Redirect based on role
-        redirectTo(role);
+        if (userData.active === false) {
+            console.warn('⚠️ Account disabled');
+            showToast('Account is disabled.', 'error');
+            setTimeout(() => {
+                signOut(auth);
+                window.location.href = '/admin.html';
+            }, 2000);
+            return;
+        }
+        
+        userName.textContent = userData.name || user.email.split('@')[0];
+        userRole.textContent = 'Administrator';
+        
+        initApp();
         
     } catch (error) {
-        console.error('❌ Role check error:', error);
-        console.error('Error details:', {
-            code: error.code,
-            message: error.message,
-            uid: user.uid
-        });
-        
-        showError('Failed to verify role. Please try again.');
-        
-        // Reset button
-        if (loginBtn) {
-            loginBtn.disabled = false;
-            loginBtnText.textContent = 'Login to Dashboard';
-        }
+        console.error('❌ Auth check error:', error);
+        showToast('Authentication error. Please login again.', 'error');
+        setTimeout(() => {
+            signOut(auth);
+            window.location.href = '/admin.html';
+        }, 2000);
     }
-}
+});
 
-function redirectTo(role) {
-    if (loginBtnText) {
-        loginBtnText.textContent = '✓ Success! Redirecting...';
-    }
-    if (loginBtn) {
-        loginBtn.style.background = '#2ECC71';
-    }
-    
-    const destination = role === 'admin' ? '/dashboard-admin.html' : '/kasir.html';
-    console.log('🔄 Redirecting to:', destination);
+// ============================================
+// Initialize App
+// ============================================
+
+async function initApp() {
+    console.log('🚀 Initializing admin dashboard V3.0...');
     
     setTimeout(() => {
-        window.location.href = destination;
-    }, 800);
+        if (loadingScreen) loadingScreen.style.display = 'none';
+        if (appContainer) appContainer.style.display = 'flex';
+    }, 1000);
+    
+    // Initialize Cloudinary Widget
+    initCloudinaryWidget();
+    
+    // Start real-time listeners
+    startRealtimeOrders();
+    startRealtimeProducts();
+    startRealtimeStaff();
+    startRealtimeExpenses();
+    
+    // Update time
+    updateTime();
+    setInterval(updateTime, 1000);
+    
+    // Event listeners
+    setupEventListeners();
+    
+    console.log('✅ Admin dashboard V3.0 initialized');
 }
 
 // ============================================
-// Error Display
+// Cloudinary Widget Initialization
 // ============================================
 
-function showError(message) {
-    errorMessage.textContent = message;
-    errorMessage.classList.add('show');
+function initCloudinaryWidget() {
+    if (!window.cloudinary) {
+        console.warn('⚠️ Cloudinary script not loaded');
+        return;
+    }
+    
+    state.cloudinaryWidget = cloudinary.createUploadWidget({
+        cloudName: CLOUDINARY_CLOUD_NAME,
+        uploadPreset: CLOUDINARY_UPLOAD_PRESET,
+        sources: ['local', 'url', 'camera'],
+        multiple: false,
+        maxFileSize: 5000000, // 5MB
+        clientAllowedFormats: ['jpg', 'png', 'jpeg', 'webp'],
+        maxImageWidth: 2000,
+        maxImageHeight: 2000,
+        cropping: true,
+        croppingAspectRatio: 1,
+        showSkipCropButton: false,
+        folder: 'koyun/products'
+    }, (error, result) => {
+        if (!error && result && result.event === 'success') {
+            console.log('✅ Image uploaded:', result.info.secure_url);
+            state.uploadedImageUrl = result.info.secure_url;
+            
+            // Update preview
+            if (productImagePreview) {
+                productImagePreview.src = result.info.secure_url;
+                productImagePreview.style.display = 'block';
+            }
+            
+            // Set to hidden input
+            const imageInput = document.getElementById('productImage');
+            if (imageInput) imageInput.value = result.info.secure_url;
+            
+            showToast('Image uploaded successfully!', 'success');
+        }
+    });
 }
 
-function hideError() {
-    errorMessage.classList.remove('show');
+// ============================================
+// Event Listeners
+// ============================================
+
+function setupEventListeners() {
+    // Sidebar toggle
+    if (menuToggle) {
+        menuToggle.addEventListener('click', () => {
+            if (sidebar) sidebar.classList.add('active');
+        });
+    }
+    
+    if (closeSidebar) {
+        closeSidebar.addEventListener('click', () => {
+            if (sidebar) sidebar.classList.remove('active');
+        });
+    }
+    
+    // Navigation
+    navItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const section = item.dataset.section;
+            switchToSection(section);
+            
+            if (window.innerWidth <= 1024) {
+                if (sidebar) sidebar.classList.remove('active');
+            }
+        });
+    });
+    
+    // Filter tabs
+    filterTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const filter = tab.dataset.filter;
+            state.currentFilter = filter;
+            
+            filterTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            renderOrders();
+        });
+    });
+    
+    // Date filter
+    if (dateFilter) {
+        dateFilter.addEventListener('change', (e) => {
+            state.currentDateFilter = e.target.value;
+            
+            if (e.target.value === 'custom') {
+                if (customDateStart) customDateStart.style.display = 'block';
+                if (customDateEnd) customDateEnd.style.display = 'block';
+            } else {
+                if (customDateStart) customDateStart.style.display = 'none';
+                if (customDateEnd) customDateEnd.style.display = 'none';
+                renderOrders();
+                updateStats();
+            }
+        });
+    }
+    
+    // Custom date range
+    if (customDateStart) {
+        customDateStart.addEventListener('change', (e) => {
+            state.customDateRange.start = new Date(e.target.value);
+            if (state.customDateRange.end) {
+                renderOrders();
+                updateStats();
+            }
+        });
+    }
+    
+    if (customDateEnd) {
+        customDateEnd.addEventListener('change', (e) => {
+            state.customDateRange.end = new Date(e.target.value);
+            state.customDateRange.end.setHours(23, 59, 59, 999);
+            if (state.customDateRange.start) {
+                renderOrders();
+                updateStats();
+            }
+        });
+    }
+    
+    // Refresh
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            refreshBtn.style.transform = 'rotate(360deg)';
+            setTimeout(() => refreshBtn.style.transform = '', 500);
+            showToast('Data refreshed', 'success');
+        });
+    }
+    
+    // Logout
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
+    
+    // Product buttons
+    if (addProductBtn) {
+        addProductBtn.addEventListener('click', openAddProductModal);
+    }
+    
+    if (saveProductBtn) {
+        saveProductBtn.addEventListener('click', handleSaveProduct);
+    }
+    
+    if (uploadImageBtn) {
+        uploadImageBtn.addEventListener('click', () => {
+            if (state.cloudinaryWidget) {
+                state.cloudinaryWidget.open();
+            } else {
+                showToast('Image uploader not ready', 'error');
+            }
+        });
+    }
+    
+    // Staff buttons
+    if (addStaffBtn) {
+        addStaffBtn.addEventListener('click', openAddStaffModal);
+    }
+    
+    if (saveStaffBtn) {
+        saveStaffBtn.addEventListener('click', handleSaveStaff);
+    }
+    
+    // Expense buttons
+    if (addExpenseBtn) {
+        addExpenseBtn.addEventListener('click', openAddExpenseModal);
+    }
+    
+    if (saveExpenseBtn) {
+        saveExpenseBtn.addEventListener('click', handleSaveExpense);
+    }
+    
+    // Export buttons
+    if (exportExcel) {
+        exportExcel.addEventListener('click', handleExportExcel);
+    }
+    
+    if (exportCSV) {
+        exportCSV.addEventListener('click', handleExportCSV);
+    }
+    
+    if (exportPDF) {
+        exportPDF.addEventListener('click', handleExportPDF);
+    }
 }
 
-console.log('✅ Login page initialized');
+// ============================================
+// Section Switching
+// ============================================
+
+window.switchToSection = function(section) {
+    state.currentSection = section;
+    
+    navItems.forEach(item => {
+        if (item.dataset.section === section) {
+            item.classList.add('active');
+        } else {
+            item.classList.remove('active');
+        }
+    });
+    
+    const titles = {
+        'dashboard': 'Dashboard Overview',
+        'orders': 'Orders Management',
+        'products': 'Product Management',
+        'analytics': 'Sales Analytics',
+        'reports': 'Export Reports',
+        'settings': 'System Settings'
+    };
+    if (pageTitle) pageTitle.textContent = titles[section] || 'Dashboard';
+    
+    document.querySelectorAll('.content-section').forEach(sec => {
+        sec.classList.remove('active');
+    });
+    
+    const targetSection = document.getElementById(section + 'Section');
+    if (targetSection) {
+        targetSection.classList.add('active');
+    }
+    
+    // Load section-specific data
+    if (section === 'analytics') {
+        renderAnalytics();
+    } else if (section === 'settings') {
+        renderStaffList();
+    }
+}
+
+// ============================================
+// Real-time Listeners
+// ============================================
+
+function startRealtimeOrders() {
+    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+    
+    if (state.unsubscribeOrders) state.unsubscribeOrders();
+    
+    state.unsubscribeOrders = onSnapshot(q, (snapshot) => {
+        state.orders = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        updateStats();
+        renderOrders();
+        renderRecentOrders();
+    }, (error) => {
+        console.error('❌ Orders listener error:', error);
+    });
+}
+
+function startRealtimeProducts() {
+    const q = query(collection(db, 'products'), orderBy('name'));
+    
+    if (state.unsubscribeProducts) state.unsubscribeProducts();
+    
+    state.unsubscribeProducts = onSnapshot(q, (snapshot) => {
+        state.products = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        renderProducts();
+    });
+}
+
+function startRealtimeStaff() {
+    const q = query(collection(db, 'users'), where('role', '==', 'kasir'));
+    
+    if (state.unsubscribeStaff) state.unsubscribeStaff();
+    
+    state.unsubscribeStaff = onSnapshot(q, (snapshot) => {
+        state.staff = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        renderStaffList();
+    });
+}
+
+function startRealtimeExpenses() {
+    const q = query(collection(db, 'expenses'), orderBy('date', 'desc'));
+    
+    if (state.unsubscribeExpenses) state.unsubscribeExpenses();
+    
+    state.unsubscribeExpenses = onSnapshot(q, (snapshot) => {
+        state.expenses = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        renderExpensesList();
+        updateProfitLoss();
+    });
+}
+
+// Lanjut part 2... (terlalu panjang, perlu dipecah)

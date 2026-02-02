@@ -1027,3 +1027,545 @@ window.deleteProduct = async function(productId) {
         showToast('Failed to delete product', 'error');
     }
 }
+
+// ============================================
+// Analytics Rendering
+// ============================================
+
+function renderAnalytics() {
+    // Calculate analytics data
+    const last7Days = getLast7DaysData();
+    const topProducts = getTopSellingProducts();
+    
+    // Render chart (simple text-based, atau pakai Chart.js kalau mau)
+    renderSalesChart(last7Days);
+    renderTopProducts(topProducts);
+    updateProfitLoss();
+}
+
+function getLast7DaysData() {
+    const data = [];
+    const now = new Date();
+    
+    for (let i = 6; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const dayOrders = state.orders.filter(order => {
+            if (!order.createdAt) return false;
+            const orderDate = order.createdAt.toDate();
+            return orderDate.toDateString() === date.toDateString() && order.status === 'completed';
+        });
+        
+        data.push({
+            date: date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }),
+            orders: dayOrders.length,
+            revenue: dayOrders.reduce((sum, o) => sum + (o.total || 0), 0)
+        });
+    }
+    
+    return data;
+}
+
+function getTopSellingProducts() {
+    const productSales = {};
+    
+    state.orders
+        .filter(o => o.status === 'completed')
+        .forEach(order => {
+            order.items.forEach(item => {
+                if (!productSales[item.name]) {
+                    productSales[item.name] = {
+                        name: item.name,
+                        quantity: 0,
+                        revenue: 0
+                    };
+                }
+                productSales[item.name].quantity += item.quantity;
+                productSales[item.name].revenue += item.price * item.quantity;
+            });
+        });
+    
+    return Object.values(productSales)
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5);
+}
+
+function renderSalesChart(data) {
+    if (!analyticsChart) return;
+    
+    const maxRevenue = Math.max(...data.map(d => d.revenue), 1);
+    
+    analyticsChart.innerHTML = `
+        <div style="background: var(--bg-card); padding: 24px; border-radius: 16px;">
+            <h3 style="color: var(--primary); margin-bottom: 20px;">📊 Sales Last 7 Days</h3>
+            <div style="display: flex; align-items: flex-end; gap: 12px; height: 300px;">
+                ${data.map(day => {
+                    const height = (day.revenue / maxRevenue) * 100;
+                    return `
+                        <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
+                            <div style="width: 100%; background: linear-gradient(180deg, var(--primary) 0%, var(--secondary) 100%); border-radius: 8px 8px 0 0; height: ${height}%; min-height: 20px; position: relative;">
+                                <div style="position: absolute; top: -30px; left: 50%; transform: translateX(-50%); font-size: 0.75rem; font-weight: 700; color: var(--primary); white-space: nowrap;">
+                                    Rp ${(day.revenue / 1000).toFixed(0)}k
+                                </div>
+                            </div>
+                            <div style="margin-top: 8px; font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">
+                                ${day.date}
+                            </div>
+                            <div style="font-size: 0.7rem; color: var(--text-tertiary);">
+                                ${day.orders} orders
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function renderTopProducts(products) {
+    if (!topProductsList) return;
+    
+    if (products.length === 0) {
+        topProductsList.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+                <p>No sales data yet</p>
+            </div>
+        `;
+        return;
+    }
+    
+    topProductsList.innerHTML = `
+        <div style="background: var(--bg-card); padding: 24px; border-radius: 16px;">
+            <h3 style="color: var(--primary); margin-bottom: 20px;">🏆 Top 5 Products</h3>
+            ${products.map((product, index) => `
+                <div style="display: flex; align-items: center; gap: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 12px; margin-bottom: 12px;">
+                    <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem;">
+                        ${index + 1}
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 700; color: var(--primary); margin-bottom: 4px;">${product.name}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-secondary);">Sold: ${product.quantity} items</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-weight: 700; color: var(--success); font-size: 1.1rem;">Rp ${product.revenue.toLocaleString('id-ID')}</div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// ============================================
+// Staff Management
+// ============================================
+
+function renderStaffList() {
+    if (!staffGrid) return;
+    
+    if (state.staff.length === 0) {
+        staffGrid.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px;">
+                <h3 style="color: var(--text-secondary);">No Staff Members</h3>
+                <p style="color: var(--text-tertiary);">Click "Add Staff" to add a kasir</p>
+            </div>
+        `;
+        return;
+    }
+    
+    staffGrid.innerHTML = state.staff.map(staff => `
+        <div class="order-card">
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+                <div style="width: 60px; height: 60px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.5rem;">
+                    ${staff.name.charAt(0).toUpperCase()}
+                </div>
+                <div style="flex: 1;">
+                    <h3 style="color: var(--primary); margin-bottom: 4px;">${staff.name}</h3>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">${staff.email}</p>
+                </div>
+                <div>
+                    <span style="background: ${staff.active ? 'var(--success)' : 'var(--danger)'}; color: white; padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">
+                        ${staff.active ? 'ACTIVE' : 'DISABLED'}
+                    </span>
+                </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-primary" onclick="editStaff('${staff.id}')" style="flex: 1;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                    Edit
+                </button>
+                <button class="btn ${staff.active ? 'btn-warning' : 'btn-success'}" onclick="toggleStaffStatus('${staff.id}', ${staff.active})">
+                    ${staff.active ? 'Disable' : 'Enable'}
+                </button>
+                <button class="btn btn-danger" onclick="deleteStaff('${staff.id}')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function openAddStaffModal() {
+    state.editingStaffId = null;
+    if (staffForm) staffForm.reset();
+    if (staffModal) staffModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+window.editStaff = function(staffId) {
+    const staff = state.staff.find(s => s.id === staffId);
+    if (!staff) return;
+    
+    state.editingStaffId = staffId;
+    
+    const nameInput = document.getElementById('staffName');
+    const emailInput = document.getElementById('staffEmail');
+    
+    if (nameInput) nameInput.value = staff.name;
+    if (emailInput) {
+        emailInput.value = staff.email;
+        emailInput.disabled = true; // Can't change email
+    }
+    
+    if (staffModal) staffModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+window.closeStaffModal = function() {
+    if (staffModal) staffModal.classList.remove('active');
+    document.body.style.overflow = '';
+    if (staffForm) staffForm.reset();
+    
+    const emailInput = document.getElementById('staffEmail');
+    if (emailInput) emailInput.disabled = false;
+    
+    state.editingStaffId = null;
+}
+
+async function handleSaveStaff() {
+    const nameInput = document.getElementById('staffName');
+    const emailInput = document.getElementById('staffEmail');
+    const passwordInput = document.getElementById('staffPassword');
+    
+    const name = nameInput ? nameInput.value.trim() : '';
+    const email = emailInput ? emailInput.value.trim() : '';
+    const password = passwordInput ? passwordInput.value : '';
+    
+    if (!name || !email) {
+        showToast('Please fill all required fields', 'error');
+        return;
+    }
+    
+    if (!state.editingStaffId && !password) {
+        showToast('Password is required for new staff', 'error');
+        return;
+    }
+    
+    try {
+        if (saveStaffBtn) {
+            saveStaffBtn.disabled = true;
+            saveStaffBtn.textContent = 'Saving...';
+        }
+        
+        if (state.editingStaffId) {
+            // Update existing staff
+            await updateDoc(doc(db, 'users', state.editingStaffId), {
+                name,
+                updatedAt: Timestamp.now()
+            });
+            showToast('Staff updated successfully', 'success');
+        } else {
+            // Create new staff
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            
+            // Store in Firestore with UID as document ID
+            await setDoc(doc(db, 'users', userCredential.user.uid), {
+                email,
+                name,
+                role: 'kasir',
+                active: true,
+                createdAt: Timestamp.now(),
+                updatedAt: Timestamp.now()
+            });
+            
+            showToast('Staff added successfully', 'success');
+        }
+        
+        closeStaffModal();
+        
+    } catch (error) {
+        console.error('❌ Save staff error:', error);
+        
+        if (error.code === 'auth/email-already-in-use') {
+            showToast('Email already in use', 'error');
+        } else if (error.code === 'auth/weak-password') {
+            showToast('Password should be at least 6 characters', 'error');
+        } else {
+            showToast('Failed to save staff', 'error');
+        }
+    } finally {
+        if (saveStaffBtn) {
+            saveStaffBtn.disabled = false;
+            saveStaffBtn.textContent = 'Save Staff';
+        }
+    }
+}
+
+window.toggleStaffStatus = async function(staffId, currentStatus) {
+    try {
+        await updateDoc(doc(db, 'users', staffId), {
+            active: !currentStatus,
+            updatedAt: Timestamp.now()
+        });
+        
+        showToast(`Staff ${!currentStatus ? 'enabled' : 'disabled'}`, 'success');
+    } catch (error) {
+        console.error('❌ Toggle status error:', error);
+        showToast('Failed to update status', 'error');
+    }
+}
+
+window.deleteStaff = async function(staffId) {
+    if (!confirm('Delete this staff member? They will no longer be able to login.')) {
+        return;
+    }
+    
+    try {
+        await deleteDoc(doc(db, 'users', staffId));
+        showToast('Staff deleted', 'success');
+    } catch (error) {
+        console.error('❌ Delete staff error:', error);
+        showToast('Failed to delete staff', 'error');
+    }
+}
+
+// ============================================
+// Expenses Management
+// ============================================
+
+function renderExpensesList() {
+    if (!expensesGrid) return;
+    
+    if (state.expenses.length === 0) {
+        expensesGrid.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px;">
+                <h3 style="color: var(--text-secondary);">No Expenses</h3>
+                <p style="color: var(--text-tertiary);">Click "Add Expense" to record expenses</p>
+            </div>
+        `;
+        return;
+    }
+    
+    expensesGrid.innerHTML = state.expenses.map(expense => {
+        const date = expense.date ? expense.date.toDate().toLocaleDateString('id-ID') : 'N/A';
+        
+        return `
+            <div class="order-card">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                    <div>
+                        <h3 style="color: var(--primary); margin-bottom: 4px;">${expense.category}</h3>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem;">${expense.description || 'No description'}</p>
+                    </div>
+                    <div style="font-size: 1.3rem; font-weight: 700; color: var(--danger);">
+                        Rp ${expense.amount.toLocaleString('id-ID')}
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--bg-tertiary);">
+                    <span style="color: var(--text-tertiary); font-size: 0.85rem;">📅 ${date}</span>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-primary" onclick="editExpense('${expense.id}')">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteExpense('${expense.id}')">Delete</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function openAddExpenseModal() {
+    state.editingExpenseId = null;
+    if (expenseForm) expenseForm.reset();
+    if (expenseModal) expenseModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+window.editExpense = function(expenseId) {
+    const expense = state.expenses.find(e => e.id === expenseId);
+    if (!expense) return;
+    
+    state.editingExpenseId = expenseId;
+    
+    const categoryInput = document.getElementById('expenseCategory');
+    const amountInput = document.getElementById('expenseAmount');
+    const dateInput = document.getElementById('expenseDate');
+    const descInput = document.getElementById('expenseDescription');
+    
+    if (categoryInput) categoryInput.value = expense.category;
+    if (amountInput) amountInput.value = expense.amount;
+    if (dateInput && expense.date) {
+        const date = expense.date.toDate();
+        dateInput.value = date.toISOString().split('T')[0];
+    }
+    if (descInput) descInput.value = expense.description || '';
+    
+    if (expenseModal) expenseModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+window.closeExpenseModal = function() {
+    if (expenseModal) expenseModal.classList.remove('active');
+    document.body.style.overflow = '';
+    if (expenseForm) expenseForm.reset();
+    state.editingExpenseId = null;
+}
+
+async function handleSaveExpense() {
+    const categoryInput = document.getElementById('expenseCategory');
+    const amountInput = document.getElementById('expenseAmount');
+    const dateInput = document.getElementById('expenseDate');
+    const descInput = document.getElementById('expenseDescription');
+    
+    const category = categoryInput ? categoryInput.value : '';
+    const amount = amountInput ? parseInt(amountInput.value) : 0;
+    const dateValue = dateInput ? dateInput.value : '';
+    const description = descInput ? descInput.value.trim() : '';
+    
+    if (!category || !amount || !dateValue) {
+        showToast('Please fill all required fields', 'error');
+        return;
+    }
+    
+    const expenseData = {
+        category,
+        amount,
+        date: Timestamp.fromDate(new Date(dateValue)),
+        description,
+        updatedAt: Timestamp.now()
+    };
+    
+    try {
+        if (saveExpenseBtn) {
+            saveExpenseBtn.disabled = true;
+            saveExpenseBtn.textContent = 'Saving...';
+        }
+        
+        if (state.editingExpenseId) {
+            await updateDoc(doc(db, 'expenses', state.editingExpenseId), expenseData);
+            showToast('Expense updated', 'success');
+        } else {
+            expenseData.createdAt = Timestamp.now();
+            await addDoc(collection(db, 'expenses'), expenseData);
+            showToast('Expense added', 'success');
+        }
+        
+        closeExpenseModal();
+        
+    } catch (error) {
+        console.error('❌ Save expense error:', error);
+        showToast('Failed to save expense', 'error');
+    } finally {
+        if (saveExpenseBtn) {
+            saveExpenseBtn.disabled = false;
+            saveExpenseBtn.textContent = 'Save Expense';
+        }
+    }
+}
+
+window.deleteExpense = async function(expenseId) {
+    if (!confirm('Delete this expense record?')) {
+        return;
+    }
+    
+    try {
+        await deleteDoc(doc(db, 'expenses', expenseId));
+        showToast('Expense deleted', 'success');
+    } catch (error) {
+        console.error('❌ Delete expense error:', error);
+        showToast('Failed to delete expense', 'error');
+    }
+}
+
+// ============================================
+// Profit/Loss Calculation
+// ============================================
+
+function updateProfitLoss() {
+    if (!profitLossCard) return;
+    
+    const filteredOrders = getFilteredOrdersByDate();
+    const filteredExpenses = getFilteredExpensesByDate();
+    
+    const revenue = filteredOrders
+        .filter(o => o.status === 'completed')
+        .reduce((sum, o) => sum + (o.total || 0), 0);
+    
+    const expenses = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+    
+    const profit = revenue - expenses;
+    const profitMargin = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : 0;
+    
+    profitLossCard.innerHTML = `
+        <div style="background: var(--bg-card); padding: 24px; border-radius: 16px;">
+            <h3 style="color: var(--primary); margin-bottom: 20px;">💰 Profit & Loss</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                <div style="background: var(--bg-secondary); padding: 20px; border-radius: 12px;">
+                    <p style="color: var(--text-secondary); margin-bottom: 8px; font-size: 0.9rem;">Total Revenue</p>
+                    <h2 style="color: var(--success); font-size: 1.8rem;">Rp ${revenue.toLocaleString('id-ID')}</h2>
+                </div>
+                <div style="background: var(--bg-secondary); padding: 20px; border-radius: 12px;">
+                    <p style="color: var(--text-secondary); margin-bottom: 8px; font-size: 0.9rem;">Total Expenses</p>
+                    <h2 style="color: var(--danger); font-size: 1.8rem;">Rp ${expenses.toLocaleString('id-ID')}</h2>
+                </div>
+                <div style="background: var(--bg-secondary); padding: 20px; border-radius: 12px;">
+                    <p style="color: var(--text-secondary); margin-bottom: 8px; font-size: 0.9rem;">Net Profit</p>
+                    <h2 style="color: ${profit >= 0 ? 'var(--success)' : 'var(--danger)'}; font-size: 1.8rem;">Rp ${profit.toLocaleString('id-ID')}</h2>
+                    <p style="font-size: 0.8rem; color: var(--text-tertiary); margin-top: 4px;">Margin: ${profitMargin}%</p>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function getFilteredExpensesByDate() {
+    const now = new Date();
+    let startDate, endDate;
+    
+    switch(state.currentDateFilter) {
+        case 'today':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            break;
+        case 'yesterday':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+            break;
+        case 'week':
+            const dayOfWeek = now.getDay();
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            break;
+        case 'month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+            break;
+        case 'custom':
+            if (!state.customDateRange.start || !state.customDateRange.end) {
+                return state.expenses;
+            }
+            startDate = state.customDateRange.start;
+            endDate = state.customDateRange.end;
+            break;
+        default:
+            return state.expenses;
+    }
+    
+    return state.expenses.filter(expense => {
+        if (!expense.date) return false;
+        const expenseDate = expense.date.toDate();
+        return expenseDate >= startDate && expenseDate <= endDate;
+    });
+}

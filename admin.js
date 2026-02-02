@@ -1569,3 +1569,520 @@ function getFilteredExpensesByDate() {
         return expenseDate >= startDate && expenseDate <= endDate;
     });
 }
+
+// ============================================
+// Export Functions
+// ============================================
+
+function handleExportExcel() {
+    const period = reportPeriod ? reportPeriod.value : 'all';
+    const data = getFilteredOrdersForExport(period);
+    
+    if (data.length === 0) {
+        showToast('No data to export', 'warning');
+        return;
+    }
+    
+    // Create Excel-compatible CSV with BOM for UTF-8
+    let csv = '\uFEFF';
+    csv += 'KoYun Coffee - Sales Report\n';
+    csv += `Period: ${formatPeriodName(period)}\n`;
+    csv += `Generated: ${new Date().toLocaleString('id-ID')}\n\n`;
+    
+    csv += 'Order ID,Date,Time,Table,Phone,Items,Total,Payment Method,Payment Status,Order Status\n';
+    
+    data.forEach(order => {
+        const date = order.createdAt ? order.createdAt.toDate() : new Date();
+        const items = order.items.map(i => `${i.name} (${i.quantity}x)`).join('; ');
+        
+        csv += `"${order.id}",`;
+        csv += `"${date.toLocaleDateString('id-ID')}",`;
+        csv += `"${date.toLocaleTimeString('id-ID')}",`;
+        csv += `"Table ${order.tableNumber}",`;
+        csv += `"${order.customerPhone}",`;
+        csv += `"${items}",`;
+        csv += `"Rp ${order.total.toLocaleString('id-ID')}",`;
+        csv += `"${order.paymentMethod || 'cash'}",`;
+        csv += `"${order.paymentStatus || 'pending'}",`;
+        csv += `"${order.status}"\n`;
+    });
+    
+    // Add summary
+    const totalRevenue = data.filter(o => o.status === 'completed').reduce((sum, o) => sum + (o.total || 0), 0);
+    const totalOrders = data.length;
+    const completedOrders = data.filter(o => o.status === 'completed').length;
+    
+    csv += '\n';
+    csv += 'SUMMARY\n';
+    csv += `Total Orders,${totalOrders}\n`;
+    csv += `Completed Orders,${completedOrders}\n`;
+    csv += `Total Revenue,"Rp ${totalRevenue.toLocaleString('id-ID')}"\n`;
+    
+    downloadFile(csv, `KoYun-Report-${period}-${Date.now()}.csv`, 'text/csv;charset=utf-8');
+    showToast('Excel file downloaded successfully!', 'success');
+}
+
+function handleExportCSV() {
+    const period = reportPeriod ? reportPeriod.value : 'all';
+    const data = getFilteredOrdersForExport(period);
+    
+    if (data.length === 0) {
+        showToast('No data to export', 'warning');
+        return;
+    }
+    
+    let csv = 'Order ID,Date,Time,Table,Phone,Items,Total,Payment,Status\n';
+    
+    data.forEach(order => {
+        const date = order.createdAt ? order.createdAt.toDate() : new Date();
+        const items = order.items.map(i => `${i.name} (${i.quantity}x)`).join('; ');
+        
+        csv += `${order.id},`;
+        csv += `${date.toLocaleDateString('id-ID')},`;
+        csv += `${date.toLocaleTimeString('id-ID')},`;
+        csv += `${order.tableNumber},`;
+        csv += `${order.customerPhone},`;
+        csv += `"${items}",`;
+        csv += `${order.total},`;
+        csv += `${order.paymentMethod || 'cash'},`;
+        csv += `${order.status}\n`;
+    });
+    
+    downloadFile(csv, `KoYun-Export-${period}-${Date.now()}.csv`, 'text/csv');
+    showToast('CSV file downloaded successfully!', 'success');
+}
+
+function handleExportPDF() {
+    const period = reportPeriod ? reportPeriod.value : 'all';
+    const data = getFilteredOrdersForExport(period);
+    
+    if (data.length === 0) {
+        showToast('No data to export', 'warning');
+        return;
+    }
+    
+    // Generate HTML for PDF (akan di-print sebagai PDF)
+    const totalRevenue = data.filter(o => o.status === 'completed').reduce((sum, o) => sum + (o.total || 0), 0);
+    const totalOrders = data.length;
+    const completedOrders = data.filter(o => o.status === 'completed').length;
+    
+    const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>KoYun Coffee - Sales Report</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    padding: 20px;
+                    color: #333;
+                }
+                .header {
+                    text-align: center;
+                    margin-bottom: 30px;
+                    border-bottom: 3px solid #6F4E37;
+                    padding-bottom: 20px;
+                }
+                .header h1 {
+                    color: #6F4E37;
+                    margin: 0;
+                }
+                .header p {
+                    color: #666;
+                    margin: 5px 0;
+                }
+                .summary {
+                    background: #f9f9f9;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-bottom: 30px;
+                    display: flex;
+                    justify-content: space-around;
+                }
+                .summary-item {
+                    text-align: center;
+                }
+                .summary-item h3 {
+                    margin: 0;
+                    color: #6F4E37;
+                }
+                .summary-item p {
+                    margin: 5px 0;
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: #333;
+                }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 20px;
+                }
+                th {
+                    background: #6F4E37;
+                    color: white;
+                    padding: 12px;
+                    text-align: left;
+                    font-weight: bold;
+                }
+                td {
+                    padding: 10px;
+                    border-bottom: 1px solid #ddd;
+                }
+                tr:nth-child(even) {
+                    background: #f9f9f9;
+                }
+                .footer {
+                    margin-top: 40px;
+                    text-align: center;
+                    color: #999;
+                    font-size: 12px;
+                }
+                @media print {
+                    body { margin: 0; }
+                    .no-print { display: none; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>☕ KoYun Coffee</h1>
+                <p>Sales Report - ${formatPeriodName(period)}</p>
+                <p>Generated: ${new Date().toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' })}</p>
+            </div>
+            
+            <div class="summary">
+                <div class="summary-item">
+                    <h3>Total Orders</h3>
+                    <p>${totalOrders}</p>
+                </div>
+                <div class="summary-item">
+                    <h3>Completed</h3>
+                    <p>${completedOrders}</p>
+                </div>
+                <div class="summary-item">
+                    <h3>Total Revenue</h3>
+                    <p>Rp ${totalRevenue.toLocaleString('id-ID')}</p>
+                </div>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Table</th>
+                        <th>Items</th>
+                        <th>Total</th>
+                        <th>Payment</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.map(order => {
+                        const date = order.createdAt ? order.createdAt.toDate() : new Date();
+                        const items = order.items.map(i => `${i.name} (${i.quantity}x)`).join(', ');
+                        return `
+                            <tr>
+                                <td>${date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                                <td>Table ${order.tableNumber}</td>
+                                <td>${items}</td>
+                                <td>Rp ${order.total.toLocaleString('id-ID')}</td>
+                                <td>${order.paymentMethod || 'cash'}</td>
+                                <td>${order.status}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+            
+            <div class="footer">
+                <p>KoYun Coffee Management System © 2026</p>
+            </div>
+            
+            <script>
+                window.onload = function() {
+                    window.print();
+                    setTimeout(function() {
+                        window.close();
+                    }, 100);
+                }
+            </script>
+        </body>
+        </html>
+    `;
+    
+    // Open in new window and print
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    
+    showToast('PDF print dialog opened', 'success');
+}
+
+function getFilteredOrdersForExport(period) {
+    const now = new Date();
+    let startDate;
+    
+    if (period === 'today') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (period === 'yesterday') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    } else if (period === 'week') {
+        const dayOfWeek = now.getDay();
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+    } else if (period === 'month') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else {
+        return state.orders;
+    }
+    
+    return state.orders.filter(order => {
+        if (!order.createdAt) return false;
+        return order.createdAt.toDate() >= startDate;
+    });
+}
+
+function downloadFile(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function formatPeriodName(period) {
+    const now = new Date();
+    if (period === 'today') return now.toLocaleDateString('id-ID', { dateStyle: 'full' });
+    if (period === 'yesterday') {
+        const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+        return yesterday.toLocaleDateString('id-ID', { dateStyle: 'full' });
+    }
+    if (period === 'week') return 'This Week';
+    if (period === 'month') return now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    return 'All Time';
+}
+
+// ============================================
+// Image Modal
+// ============================================
+
+window.openImageModal = function(imageUrl) {
+    if (modalImage) modalImage.src = imageUrl;
+    if (imageModal) imageModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+window.closeImageModal = function() {
+    if (imageModal) imageModal.classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+// Close modal on background click
+if (imageModal) {
+    imageModal.addEventListener('click', function(e) {
+        if (e.target === imageModal) {
+            closeImageModal();
+        }
+    });
+}
+
+// ============================================
+// Logout
+// ============================================
+
+async function handleLogout() {
+    if (!confirm('Logout from admin dashboard?')) return;
+    
+    try {
+        // Unsubscribe all listeners
+        if (state.unsubscribeOrders) state.unsubscribeOrders();
+        if (state.unsubscribeProducts) state.unsubscribeProducts();
+        if (state.unsubscribeStaff) state.unsubscribeStaff();
+        if (state.unsubscribeExpenses) state.unsubscribeExpenses();
+        
+        await signOut(auth);
+        console.log('✅ Logged out');
+        window.location.href = '/admin.html';
+    } catch (error) {
+        console.error('❌ Logout error:', error);
+        showToast('Logout failed', 'error');
+    }
+}
+
+// ============================================
+// Utility Functions
+// ============================================
+
+function updateTime() {
+    if (!currentTime) return;
+    
+    const now = new Date();
+    currentTime.textContent = now.toLocaleDateString('id-ID', { 
+        weekday: 'short', 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function formatTime(date) {
+    const now = new Date();
+    const diff = now - date;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    
+    return date.toLocaleDateString('id-ID', { 
+        day: 'numeric', 
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function showToast(message, type = 'info') {
+    const colors = {
+        success: '#2ECC71',
+        error: '#E74C3C',
+        info: '#3498DB',
+        warning: '#F39C12'
+    };
+    
+    const icons = {
+        success: '✓',
+        error: '✗',
+        info: 'ℹ',
+        warning: '⚠'
+    };
+    
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${colors[type]};
+        color: white;
+        padding: 16px 24px;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        z-index: 10000;
+        font-weight: 600;
+        animation: slideInRight 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        max-width: 400px;
+    `;
+    
+    toast.innerHTML = `
+        <span style="font-size: 1.5rem;">${icons[type]}</span>
+        <span>${message}</span>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOutRight 0.3s ease-out';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Add animation styles
+const styleAnimations = document.createElement('style');
+styleAnimations.textContent = `
+    @keyframes slideInRight {
+        from { transform: translateX(400px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOutRight {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(400px); opacity: 0; }
+    }
+    
+    .order-card {
+        background: var(--bg-card);
+        padding: 20px;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .order-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    }
+    
+    .btn {
+        padding: 10px 16px;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.9rem;
+    }
+    
+    .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    
+    .btn:active {
+        transform: translateY(0);
+    }
+    
+    .btn-primary {
+        background: var(--primary);
+        color: white;
+    }
+    
+    .btn-success {
+        background: var(--success);
+        color: white;
+    }
+    
+    .btn-danger {
+        background: var(--danger);
+        color: white;
+    }
+    
+    .btn-warning {
+        background: var(--warning);
+        color: white;
+    }
+    
+    .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    
+    .proof-image {
+        width: 100%;
+        max-width: 200px;
+        height: auto;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+    
+    .proof-image:hover {
+        transform: scale(1.05);
+    }
+`;
+document.head.appendChild(styleAnimations);
+
+console.log('✅ Admin Dashboard V3.0 - All Parts Loaded Successfully!');

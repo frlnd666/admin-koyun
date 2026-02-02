@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KoYun Coffee - Management System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #6F4E37 0%, #A0826D 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .loading-container {
+            text-align: center;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            font-size: 5rem;
+            margin-bottom: 20px;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-20px);
+            }
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+
+        p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            margin-bottom: 40px;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid rgba(255,255,255,0.3);
+            border-top: 6px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status-text {
+            margin-top: 24px;
+            font-size: 0.95rem;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-container">
+        <div class="logo">☕</div>
+        <h1>KoYun Coffee</h1>
+        <p>Management System</p>
+        <div class="spinner"></div>
+        <p class="status-text" id="statusText">Checking authentication...</p>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDOUb7G6NBe2IKTyLYKFYyf7e0uiNoDoBs",
+            authDomain: "koyun-id.firebaseapp.com",
+            projectId: "koyun-id",
+            storageBucket: "koyun-id.firebasestorage.app",
+            messagingSenderId: "672101013741",
+            appId: "1:672101013741:web:64b367d77ec8df8ecf14e4"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const statusText = document.getElementById('statusText');
+
+        // Auto redirect based on auth status
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                // Not logged in - redirect to login
+                statusText.textContent = 'Redirecting to login...';
+                setTimeout(() => {
+                    window.location.href = '/admin.html';
+                }, 800);
+                return;
+            }
+
+            try {
+                statusText.textContent = 'Verifying credentials...';
+                
+                const userDocRef = doc(db, 'users', user.uid);
+                const userDocSnap = await getDoc(userDocRef);
+
+                if (!userDocSnap.exists()) {
+                    // User not found - logout and redirect
+                    statusText.textContent = 'User not found. Redirecting...';
+                    await auth.signOut();
+                    setTimeout(() => {
+                        window.location.href = '/admin.html';
+                    }, 1000);
+                    return;
+                }
+
+                const userData = userDocSnap.data();
+                const role = userData.role;
+                const active = userData.active;
+
+                // Check if account is disabled
+                if (active === false) {
+                    statusText.textContent = 'Account disabled. Redirecting...';
+                    await auth.signOut();
+                    setTimeout(() => {
+                        window.location.href = '/admin.html';
+                    }, 1000);
+                    return;
+                }
+
+                // Redirect based on role
+                if (role === 'admin') {
+                    statusText.textContent = 'Welcome Admin! Redirecting...';
+                    setTimeout(() => {
+                        window.location.href = '/dashboard-admin.html';
+                    }, 800);
+                } else if (role === 'kasir') {
+                    statusText.textContent = 'Welcome Kasir! Redirecting...';
+                    setTimeout(() => {
+                        window.location.href = '/kasir.html';
+                    }, 800);
+                } else {
+                    // Unknown role - logout and redirect
+                    statusText.textContent = 'Invalid role. Redirecting...';
+                    await auth.signOut();
+                    setTimeout(() => {
+                        window.location.href = '/admin.html';
+                    }, 1000);
+                }
+
+            } catch (error) {
+                console.error('❌ Auth check error:', error);
+                statusText.textContent = 'Error occurred. Redirecting to login...';
+                setTimeout(() => {
+                    window.location.href = '/admin.html';
+                }, 1500);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -157,7 +157,7 @@ onAuthStateChanged(auth, async (user) => {
     if (!user) {
         console.log('❌ No user authenticated');
         window.location.href = '/admin.html';
-        return;
+        return; // ✅ STOP EXECUTION
     }
 
     console.log('✅ User authenticated:', user.email);
@@ -174,11 +174,13 @@ onAuthStateChanged(auth, async (user) => {
                 signOut(auth);
                 window.location.href = '/admin.html';
             }, 2000);
-            return;
+            return; // ✅ STOP EXECUTION
         }
         
         const userData = userDocSnap.data();
         state.userRole = userData.role || 'kasir';
+        
+        console.log('👤 User role:', state.userRole); // ✅ TAMBAHKAN LOG
         
         if (state.userRole !== 'admin') {
             console.warn('⚠️ Access denied: Not an admin');
@@ -186,7 +188,7 @@ onAuthStateChanged(auth, async (user) => {
             setTimeout(() => {
                 window.location.href = '/kasir.html';
             }, 1500);
-            return;
+            return; // ✅ STOP EXECUTION
         }
         
         if (userData.active === false) {
@@ -196,8 +198,10 @@ onAuthStateChanged(auth, async (user) => {
                 signOut(auth);
                 window.location.href = '/admin.html';
             }, 2000);
-            return;
+            return; // ✅ STOP EXECUTION
         }
+        
+        console.log('✅ Admin access granted'); // ✅ TAMBAHKAN LOG
         
         userName.textContent = userData.name || user.email.split('@')[0];
         userRole.textContent = 'Administrator';
@@ -211,8 +215,10 @@ onAuthStateChanged(auth, async (user) => {
             signOut(auth);
             window.location.href = '/admin.html';
         }, 2000);
+        return; // ✅ STOP EXECUTION
     }
 });
+
 
 // ============================================
 // Initialize App

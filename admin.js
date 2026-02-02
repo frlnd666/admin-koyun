@@ -1,7 +1,7 @@
 /* ============================================
    KoYun Coffee V2.0 - Staff Login
    Role-Based Access Control
-   PRODUCTION VERSION
+   PRODUCTION VERSION - PERFECT
    ============================================ */
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
@@ -45,7 +45,12 @@ const errorMessage = document.getElementById('errorMessage');
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         console.log('✅ User already authenticated:', user.email);
-        await redirectBasedOnRole(user);
+        
+        // Only redirect if we're on login page
+        const currentPath = window.location.pathname;
+        if (currentPath.includes('admin.html') || currentPath === '/' || currentPath.endsWith('/')) {
+            await redirectBasedOnRole(user);
+        }
     }
 });
 
@@ -75,7 +80,7 @@ loginForm.addEventListener('submit', async (e) => {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
         
-        console.log('✅ Authentication successful');
+        console.log('✅ Authentication successful, UID:', user.uid);
         
         loginBtnText.textContent = 'Verifying access...';
         
@@ -83,7 +88,7 @@ loginForm.addEventListener('submit', async (e) => {
         await redirectBasedOnRole(user);
         
     } catch (error) {
-        console.error('❌ Login error:', error.code);
+        console.error('❌ Login error:', error.code, error.message);
         
         // User-friendly error messages
         let message = 'Login failed. Please try again.';
@@ -95,16 +100,16 @@ loginForm.addEventListener('submit', async (e) => {
                 message = 'Invalid email or password';
                 break;
             case 'auth/too-many-requests':
-                message = 'Too many failed attempts. Please try again later.';
+                message = 'Too many failed attempts. Try again later.';
                 break;
             case 'auth/network-request-failed':
-                message = 'Network error. Check your internet connection.';
+                message = 'Network error. Check your connection.';
                 break;
             case 'auth/invalid-email':
                 message = 'Invalid email format';
                 break;
             case 'auth/user-disabled':
-                message = 'This account has been disabled';
+                message = 'Account disabled. Contact admin.';
                 break;
         }
         
@@ -122,46 +127,80 @@ loginForm.addEventListener('submit', async (e) => {
 
 async function redirectBasedOnRole(user) {
     try {
-        console.log('🔍 Checking user role...');
+        console.log('🔍 Fetching user document for UID:', user.uid);
         
-        // Get user document from Firestore
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        // Get user document directly by UID
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
         
-        if (!userDoc.exists()) {
-            console.warn('⚠️ User document not found, creating default...');
-            // Default to kasir if no user doc exists
-            redirectTo('kasir');
+        if (!userDocSnap.exists()) {
+            console.error('❌ User document not found in Firestore');
+            console.log('💡 Tip: Create document in Firestore with ID:', user.uid);
+            
+            showError('User not found. Please contact administrator.');
+            
+            // Reset button if on login page
+            if (loginBtn) {
+                loginBtn.disabled = false;
+                loginBtnText.textContent = 'Login to Dashboard';
+            }
             return;
         }
         
-        const userData = userDoc.data();
+        const userData = userDocSnap.data();
         const role = userData.role || 'kasir';
         
-        console.log('👤 User role:', role);
+        console.log('✅ User data:', {
+            email: userData.email,
+            role: role,
+            name: userData.name
+        });
+        
+        // Check if user is active
+        if (userData.active === false) {
+            showError('Account is disabled. Contact administrator.');
+            if (loginBtn) {
+                loginBtn.disabled = false;
+                loginBtnText.textContent = 'Login to Dashboard';
+            }
+            return;
+        }
         
         // Redirect based on role
         redirectTo(role);
         
     } catch (error) {
         console.error('❌ Role check error:', error);
-        // Default to kasir on error
-        redirectTo('kasir');
+        console.error('Error details:', {
+            code: error.code,
+            message: error.message,
+            uid: user.uid
+        });
+        
+        showError('Failed to verify role. Please try again.');
+        
+        // Reset button
+        if (loginBtn) {
+            loginBtn.disabled = false;
+            loginBtnText.textContent = 'Login to Dashboard';
+        }
     }
 }
 
 function redirectTo(role) {
-    loginBtnText.textContent = '✓ Success! Redirecting...';
-    loginBtn.style.background = 'var(--success)';
+    if (loginBtnText) {
+        loginBtnText.textContent = '✓ Success! Redirecting...';
+    }
+    if (loginBtn) {
+        loginBtn.style.background = '#2ECC71';
+    }
+    
+    const destination = role === 'admin' ? '/dashboard-admin.html' : '/kasir.html';
+    console.log('🔄 Redirecting to:', destination);
     
     setTimeout(() => {
-        if (role === 'admin') {
-            console.log('🔄 Redirecting to Admin Dashboard');
-            window.location.href = '/dashboard-admin.html';
-        } else {
-            console.log('🔄 Redirecting to Kasir Dashboard');
-            window.location.href = '/kasir.html';
-        }
-    }, 500);
+        window.location.href = destination;
+    }, 800);
 }
 
 // ============================================

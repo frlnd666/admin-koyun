@@ -3,78 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#6F4E37">
-    <title>KoYun - Kasir Dashboard</title>
-    <link rel="stylesheet" href="staff-styles.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>KoYun Kasir Dashboard</title>
+    <link rel="stylesheet" href="/css/dashboard.css">
 </head>
 <body>
     <!-- Loading Screen -->
     <div id="loadingScreen" class="loading-screen">
-        <div class="loading-content">
-            <div class="spinner"></div>
-            <p>Loading Dashboard...</p>
-        </div>
+        <div class="spinner"></div>
+        <p>Loading Dashboard...</p>
     </div>
 
-    <!-- Main Container -->
+    <!-- App Container -->
     <div id="appContainer" class="app-container" style="display: none;">
         <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
+        <aside id="sidebar" class="sidebar">
             <div class="sidebar-header">
-                <div class="brand-logo">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
-                        <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
-                    </svg>
-                    <div>
-                        <h1>KoYun</h1>
-                        <span>Kasir Dashboard</span>
-                    </div>
-                </div>
-                <button class="btn-close-sidebar" id="closeSidebar">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
+                <h2>☕ KoYun Kasir</h2>
+                <button id="closeSidebar" class="close-sidebar">✕</button>
             </div>
 
-            <nav class="sidebar-nav">
-                <a href="#orders" class="nav-item active" data-section="orders">
+            <div class="user-info">
+                <div class="user-avatar">K</div>
+                <div class="user-details">
+                    <h3 id="userName">Kasir</h3>
+                    <span id="userRole">Kasir</span>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" data-section="orders">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="9" cy="21" r="1"></circle>
                         <circle cx="20" cy="21" r="1"></circle>
                         <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
                     </svg>
                     <span>Orders</span>
-                    <span class="badge" id="pendingBadge">0</span>
+                    <span id="pendingBadge" class="badge">0</span>
                 </a>
-                <a href="#reports" class="nav-item" data-section="reports">
+                <a href="#" class="nav-item" data-section="reports">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="20" x2="12" y2="10"></line>
-                        <line x1="18" y1="20" x2="18" y2="4"></line>
-                        <line x1="6" y1="20" x2="6" y2="16"></line>
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
                     </svg>
                     <span>Reports</span>
                 </a>
             </nav>
 
             <div class="sidebar-footer">
-                <div class="user-info">
-                    <div class="user-avatar">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="12" cy="7" r="4"></circle>
-                        </svg>
-                    </div>
-                    <div class="user-details">
-                        <strong id="userName">Kasir</strong>
-                        <span id="userRole">Staff</span>
-                    </div>
-                </div>
-                <button class="btn-logout" id="logoutBtn">
+                <button id="logoutBtn" class="btn-logout">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                         <polyline points="16 17 21 12 16 7"></polyline>
@@ -87,165 +66,127 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Top Bar -->
-            <header class="top-bar">
-                <button class="btn-menu" id="menuToggle">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="3" y1="12" x2="21" y2="12"></line>
-                        <line x1="3" y1="6" x2="21" y2="6"></line>
-                        <line x1="3" y1="18" x2="21" y2="18"></line>
-                    </svg>
-                </button>
-                <div class="top-bar-content">
-                    <h2 id="pageTitle">Orders Management</h2>
-                    <div class="top-bar-actions">
-                        <div class="current-time" id="currentTime"></div>
-                        <button class="btn-refresh" id="refreshBtn" title="Refresh Data">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="23 4 23 10 17 10"></polyline>
-                                <polyline points="1 20 1 14 7 14"></polyline>
-                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                            </svg>
-                        </button>
-                    </div>
+            <!-- Header -->
+            <header class="header">
+                <div class="header-left">
+                    <button id="menuToggle" class="menu-toggle">☰</button>
+                    <h1 id="pageTitle">Orders Management</h1>
+                </div>
+                <div class="header-right">
+                    <span id="currentTime" class="current-time"></span>
+                    <button id="refreshBtn" class="btn-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <polyline points="1 20 1 14 7 14"></polyline>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    </button>
                 </div>
             </header>
 
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #FFF3CD;">⏳</div>
+                    <div class="stat-details">
+                        <span class="stat-label">Pending</span>
+                        <span class="stat-value" id="statPending">0</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #D1ECF1;">⚙️</div>
+                    <div class="stat-details">
+                        <span class="stat-label">Processing</span>
+                        <span class="stat-value" id="statProcessing">0</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #D4EDDA;">✓</div>
+                    <div class="stat-details">
+                        <span class="stat-label">Completed</span>
+                        <span class="stat-value" id="statCompleted">0</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #E2D5C7;">💰</div>
+                    <div class="stat-details">
+                        <span class="stat-label">Today Revenue</span>
+                        <span class="stat-value" id="statRevenue">Rp 0</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Orders Section -->
             <section id="ordersSection" class="content-section active">
-                <!-- Stats Cards -->
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-icon pending">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <polyline points="12 6 12 12 16 14"></polyline>
-                            </svg>
-                        </div>
-                        <div class="stat-details">
-                            <span class="stat-label">Pending</span>
-                            <strong class="stat-value" id="statPending">0</strong>
-                        </div>
-                    </div>
-
-                    <div class="stat-card">
-                        <div class="stat-icon processing">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"></path>
-                            </svg>
-                        </div>
-                        <div class="stat-details">
-                            <span class="stat-label">Processing</span>
-                            <strong class="stat-value" id="statProcessing">0</strong>
-                        </div>
-                    </div>
-
-                    <div class="stat-card">
-                        <div class="stat-icon completed">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="20 6 9 17 4 12"></polyline>
-                            </svg>
-                        </div>
-                        <div class="stat-details">
-                            <span class="stat-label">Completed</span>
-                            <strong class="stat-value" id="statCompleted">0</strong>
-                        </div>
-                    </div>
-
-                    <div class="stat-card">
-                        <div class="stat-icon revenue">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <line x1="12" y1="1" x2="12" y2="23"></line>
-                                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                            </svg>
-                        </div>
-                        <div class="stat-details">
-                            <span class="stat-label">Today's Revenue</span>
-                            <strong class="stat-value" id="statRevenue">Rp 0</strong>
-                        </div>
+                <div class="section-header">
+                    <h2>Orders</h2>
+                    
+                    <!-- Notification Settings -->
+                    <div class="notification-settings">
+                        <label class="switch">
+                            <input type="checkbox" id="notificationToggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span>Notifications</span>
+                        
+                        <label class="switch" style="margin-left: 16px;">
+                            <input type="checkbox" id="soundToggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span>Sound</span>
+                        
+                        <input type="range" id="volumeControl" min="0" max="1" step="0.1" value="0.5" 
+                               style="width: 100px; margin-left: 16px;">
+                        <span>🔊</span>
                     </div>
                 </div>
 
                 <!-- Filter Tabs -->
                 <div class="filter-tabs">
                     <button class="tab-btn active" data-filter="all">
-                        All Orders
-                        <span class="tab-count" id="countAll">0</span>
+                        All <span id="countAll" class="count">0</span>
                     </button>
                     <button class="tab-btn" data-filter="pending">
-                        Pending
-                        <span class="tab-count" id="countPending">0</span>
+                        Pending <span id="countPending" class="count">0</span>
                     </button>
                     <button class="tab-btn" data-filter="processing">
-                        Processing
-                        <span class="tab-count" id="countProcessing">0</span>
+                        Processing <span id="countProcessing" class="count">0</span>
                     </button>
                     <button class="tab-btn" data-filter="completed">
-                        Completed
-                        <span class="tab-count" id="countCompleted">0</span>
+                        Completed <span id="countCompleted" class="count">0</span>
                     </button>
                 </div>
 
                 <!-- Orders Grid -->
-                <div class="orders-grid" id="ordersGrid">
-                    <!-- Loading skeleton -->
-                    <div class="order-skeleton"></div>
-                    <div class="order-skeleton"></div>
-                    <div class="order-skeleton"></div>
-                </div>
+                <div id="ordersGrid" class="orders-grid"></div>
             </section>
 
             <!-- Reports Section -->
             <section id="reportsSection" class="content-section">
-                <div class="report-header">
-                    <h3>Sales Report</h3>
-                    <div class="report-controls">
+                <div class="section-header">
+                    <h2>Sales Reports</h2>
+                    <div>
                         <select id="reportPeriod" class="select-input">
                             <option value="today">Today</option>
                             <option value="week">This Week</option>
                             <option value="month">This Month</option>
-                            <option value="custom">Custom Range</option>
+                            <option value="all">All Time</option>
                         </select>
-                        <button class="btn btn-primary" id="generateReport">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                            Generate
-                        </button>
+                        <button id="generateReport" class="btn btn-primary">Generate Report</button>
                     </div>
                 </div>
 
-                <div id="reportContent" class="report-content">
-                    <div class="empty-state">
-                        <svg width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <line x1="12" y1="20" x2="12" y2="10"></line>
-                            <line x1="18" y1="20" x2="18" y2="4"></line>
-                            <line x1="6" y1="20" x2="6" y2="16"></line>
-                        </svg>
-                        <h3>No Report Generated</h3>
-                        <p>Select a period and click Generate to view sales report</p>
-                    </div>
-                </div>
+                <div id="reportContent" class="report-content"></div>
             </section>
         </main>
     </div>
 
-    <!-- Image Viewer Modal -->
-    <div id="imageModal" class="modal">
-        <div class="modal-backdrop" onclick="closeImageModal()"></div>
-        <div class="image-modal-content">
-            <button class="btn-close-modal" onclick="closeImageModal()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-            </button>
-            <img id="modalImage" src="" alt="Payment Proof">
-        </div>
+    <!-- Image Modal -->
+    <div id="imageModal" class="modal" onclick="closeImageModal()">
+        <span class="close-modal">✕</span>
+        <img id="modalImage" class="modal-image" src="" alt="Payment Proof">
     </div>
 
-    <script type="module" src="kasir.js"></script>
+    <script type="module" src="/js/kasir.js"></script>
 </body>
 </html>

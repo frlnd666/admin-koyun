@@ -1,10 +1,11 @@
 /* ============================================
    KoYun Coffee V2.0 - Admin Dashboard Logic
    Full-Featured with Export, Analytics, CRUD
+   PRODUCTION VERSION - PERFECT & FINAL
    ============================================ */
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { getFirestore, collection, query, where, getDocs, doc, updateDoc, addDoc, deleteDoc, onSnapshot, orderBy, Timestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { getFirestore, collection, query, getDocs, doc, getDoc, updateDoc, addDoc, deleteDoc, onSnapshot, orderBy, Timestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { getAuth, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
 // ============================================
@@ -24,7 +25,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-console.log('✅ Firebase initialized');
+console.log('✅ Firebase initialized - Admin Dashboard');
 
 // ============================================
 // DOM Elements
@@ -41,14 +42,6 @@ const refreshBtn = document.getElementById('refreshBtn');
 // Navigation
 const navItems = document.querySelectorAll('.nav-item');
 const pageTitle = document.getElementById('pageTitle');
-
-// Sections
-const dashboardSection = document.getElementById('dashboardSection');
-const ordersSection = document.getElementById('ordersSection');
-const productsSection = document.getElementById('productsSection');
-const analyticsSection = document.getElementById('analyticsSection');
-const reportsSection = document.getElementById('reportsSection');
-const settingsSection = document.getElementById('settingsSection');
 
 // User Info
 const userName = document.getElementById('userName');
@@ -94,7 +87,6 @@ const saveProductBtn = document.getElementById('saveProductBtn');
 const reportPeriod = document.getElementById('reportPeriod');
 const exportExcel = document.getElementById('exportExcel');
 const exportCSV = document.getElementById('exportCSV');
-const reportContent = document.getElementById('reportContent');
 
 // Time Display
 const currentTime = document.getElementById('currentTime');
@@ -120,37 +112,78 @@ let state = {
 // ============================================
 
 onAuthStateChanged(auth, async (user) => {
-    if (user) {
-        console.log('✅ User authenticated:', user.email);
-        state.user = user;
-        
-        // Check if user is admin
-        const userDoc = await getDocs(query(collection(db, 'users'), where('email', '==', user.email)));
-        
-        if (!userDoc.empty) {
-            const userData = userDoc.docs[0].data();
-            state.userRole = userData.role || 'kasir';
-            
-            if (state.userRole !== 'admin') {
-                console.warn('⚠️ Access denied: Not an admin');
-                showToast('Access denied. Admin only.', 'error');
-                setTimeout(() => {
-                    window.location.href = '/kasir.html';
-                }, 2000);
-                return;
-            }
-            
-            userName.textContent = user.email.split('@')[0];
-            userRole.textContent = 'Administrator';
-            initApp();
-        } else {
-            // Redirect to kasir if no user doc
-            console.warn('⚠️ No user document found');
-            window.location.href = '/kasir.html';
-        }
-    } else {
+    if (!user) {
         console.log('❌ No user authenticated');
         window.location.href = '/admin.html';
+        return;
+    }
+
+    console.log('✅ User authenticated:', user.email);
+    state.user = user;
+    
+    try {
+        // Get user document by UID
+        console.log('🔍 Fetching user document for UID:', user.uid);
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        
+        if (!userDocSnap.exists()) {
+            console.error('❌ User document not found in Firestore');
+            showToast('User data not found. Contact admin.', 'error');
+            setTimeout(() => {
+                signOut(auth);
+                window.location.href = '/admin.html';
+            }, 2000);
+            return;
+        }
+        
+        const userData = userDocSnap.data();
+        state.userRole = userData.role || 'kasir';
+        
+        console.log('👤 User role:', state.userRole);
+        console.log('📧 User email:', userData.email);
+        
+        // Check if user is admin
+        if (state.userRole !== 'admin') {
+            console.warn('⚠️ Access denied: Not an admin');
+            showToast('Access denied. Admin only.', 'error');
+            setTimeout(() => {
+                window.location.href = '/kasir.html';
+            }, 1500);
+            return;
+        }
+        
+        // Check if active
+        if (userData.active === false) {
+            console.warn('⚠️ Account disabled');
+            showToast('Account is disabled.', 'error');
+            setTimeout(() => {
+                signOut(auth);
+                window.location.href = '/admin.html';
+            }, 2000);
+            return;
+        }
+        
+        // Set user info
+        userName.textContent = userData.name || user.email.split('@')[0];
+        userRole.textContent = 'Administrator';
+        
+        console.log('✅ Admin access granted');
+        
+        // Initialize app
+        initApp();
+        
+    } catch (error) {
+        console.error('❌ Auth check error:', error);
+        console.error('Error details:', {
+            code: error.code,
+            message: error.message
+        });
+        showToast('Authentication error. Please login again.', 'error');
+        setTimeout(() => {
+            signOut(auth);
+            window.location.href = '/admin.html';
+        }, 2000);
     }
 });
 
@@ -161,9 +194,10 @@ onAuthStateChanged(auth, async (user) => {
 async function initApp() {
     console.log('🚀 Initializing admin dashboard...');
     
+    // Hide loading, show app
     setTimeout(() => {
-        loadingScreen.style.display = 'none';
-        appContainer.style.display = 'flex';
+        if (loadingScreen) loadingScreen.style.display = 'none';
+        if (appContainer) appContainer.style.display = 'flex';
     }, 1000);
     
     // Start real-time listeners
@@ -176,6 +210,8 @@ async function initApp() {
     
     // Event listeners
     setupEventListeners();
+    
+    console.log('✅ Admin dashboard initialized successfully');
 }
 
 // ============================================
@@ -184,13 +220,17 @@ async function initApp() {
 
 function setupEventListeners() {
     // Sidebar toggle
-    menuToggle.addEventListener('click', () => {
-        sidebar.classList.add('active');
-    });
+    if (menuToggle) {
+        menuToggle.addEventListener('click', () => {
+            if (sidebar) sidebar.classList.add('active');
+        });
+    }
     
-    closeSidebar.addEventListener('click', () => {
-        sidebar.classList.remove('active');
-    });
+    if (closeSidebar) {
+        closeSidebar.addEventListener('click', () => {
+            if (sidebar) sidebar.classList.remove('active');
+        });
+    }
     
     // Navigation
     navItems.forEach(item => {
@@ -200,7 +240,7 @@ function setupEventListeners() {
             switchToSection(section);
             
             if (window.innerWidth <= 1024) {
-                sidebar.classList.remove('active');
+                if (sidebar) sidebar.classList.remove('active');
             }
         });
     });
@@ -219,25 +259,39 @@ function setupEventListeners() {
     });
     
     // Refresh button
-    refreshBtn.addEventListener('click', () => {
-        refreshBtn.style.transform = 'rotate(360deg)';
-        setTimeout(() => {
-            refreshBtn.style.transform = '';
-        }, 500);
-        
-        showToast('Data refreshed', 'success');
-    });
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            refreshBtn.style.transform = 'rotate(360deg)';
+            setTimeout(() => {
+                refreshBtn.style.transform = '';
+            }, 500);
+            
+            showToast('Data refreshed', 'success');
+        });
+    }
     
     // Logout
-    logoutBtn.addEventListener('click', handleLogout);
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
     
     // Product buttons
-    addProductBtn.addEventListener('click', openAddProductModal);
-    saveProductBtn.addEventListener('click', handleSaveProduct);
+    if (addProductBtn) {
+        addProductBtn.addEventListener('click', openAddProductModal);
+    }
+    
+    if (saveProductBtn) {
+        saveProductBtn.addEventListener('click', handleSaveProduct);
+    }
     
     // Export buttons
-    exportExcel.addEventListener('click', handleExportExcel);
-    exportCSV.addEventListener('click', handleExportCSV);
+    if (exportExcel) {
+        exportExcel.addEventListener('click', handleExportExcel);
+    }
+    
+    if (exportCSV) {
+        exportCSV.addEventListener('click', handleExportCSV);
+    }
 }
 
 // ============================================
@@ -265,14 +319,17 @@ window.switchToSection = function(section) {
         'reports': 'Export Reports',
         'settings': 'System Settings'
     };
-    pageTitle.textContent = titles[section] || 'Dashboard';
+    if (pageTitle) pageTitle.textContent = titles[section] || 'Dashboard';
     
     // Show/hide sections
     document.querySelectorAll('.content-section').forEach(sec => {
         sec.classList.remove('active');
     });
     
-    document.getElementById(section + 'Section').classList.add('active');
+    const targetSection = document.getElementById(section + 'Section');
+    if (targetSection) {
+        targetSection.classList.add('active');
+    }
 }
 
 // ============================================
@@ -355,23 +412,23 @@ function updateStats() {
         .reduce((sum, o) => sum + (o.total || 0), 0);
     
     // Dashboard stats
-    dashPending.textContent = pending;
-    dashProcessing.textContent = processing;
-    dashCompleted.textContent = completed;
-    dashRevenue.textContent = `Rp ${revenue.toLocaleString('id-ID')}`;
+    if (dashPending) dashPending.textContent = pending;
+    if (dashProcessing) dashProcessing.textContent = processing;
+    if (dashCompleted) dashCompleted.textContent = completed;
+    if (dashRevenue) dashRevenue.textContent = `Rp ${revenue.toLocaleString('id-ID')}`;
     
     // Orders section stats
-    statPending.textContent = pending;
-    statProcessing.textContent = processing;
-    statCompleted.textContent = completed;
-    statRevenue.textContent = `Rp ${revenue.toLocaleString('id-ID')}`;
-    pendingBadge.textContent = pending;
+    if (statPending) statPending.textContent = pending;
+    if (statProcessing) statProcessing.textContent = processing;
+    if (statCompleted) statCompleted.textContent = completed;
+    if (statRevenue) statRevenue.textContent = `Rp ${revenue.toLocaleString('id-ID')}`;
+    if (pendingBadge) pendingBadge.textContent = pending;
     
     // Filter counts
-    countAll.textContent = state.orders.length;
-    countPending.textContent = state.orders.filter(o => o.status === 'pending').length;
-    countProcessing.textContent = state.orders.filter(o => o.status === 'processing').length;
-    countCompleted.textContent = state.orders.filter(o => o.status === 'completed').length;
+    if (countAll) countAll.textContent = state.orders.length;
+    if (countPending) countPending.textContent = state.orders.filter(o => o.status === 'pending').length;
+    if (countProcessing) countProcessing.textContent = state.orders.filter(o => o.status === 'processing').length;
+    if (countCompleted) countCompleted.textContent = state.orders.filter(o => o.status === 'completed').length;
 }
 
 // ============================================
@@ -379,6 +436,8 @@ function updateStats() {
 // ============================================
 
 function renderOrders() {
+    if (!ordersGrid) return;
+    
     const filtered = state.currentFilter === 'all' 
         ? state.orders 
         : state.orders.filter(o => o.status === state.currentFilter);
@@ -430,7 +489,6 @@ function createOrderCard(order) {
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                     </svg>
-                    Delete
                 </button>
             </div>
         `
@@ -448,7 +506,6 @@ function createOrderCard(order) {
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                     </svg>
-                    Delete
                 </button>
             </div>
         `
@@ -527,6 +584,8 @@ function createOrderCard(order) {
 // ============================================
 
 function renderRecentOrders() {
+    if (!recentOrdersList) return;
+    
     const recent = state.orders.slice(0, 5);
     
     if (recent.length === 0) {
@@ -614,6 +673,8 @@ window.deleteOrder = async function(orderId) {
 // ============================================
 
 function renderProducts() {
+    if (!productsGrid) return;
+    
     if (state.products.length === 0) {
         productsGrid.innerHTML = `
             <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px;">
@@ -627,7 +688,8 @@ function renderProducts() {
     productsGrid.innerHTML = state.products.map(product => `
         <div class="order-card">
             <img src="${product.imageUrl || 'https://via.placeholder.com/400x300/6F4E37/FFFFFF?text=' + encodeURIComponent(product.name)}" 
-                 style="width: 100%; height: 200px; object-fit: cover; border-radius: 12px; margin-bottom: 16px;">
+                 style="width: 100%; height: 200px; object-fit: cover; border-radius: 12px; margin-bottom: 16px;"
+                 onerror="this.src='https://via.placeholder.com/400x300/6F4E37/FFFFFF?text=No+Image'">
             <h3 style="color: var(--primary); margin-bottom: 8px;">${product.name}</h3>
             <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 12px;">${product.description || 'No description'}</p>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -647,7 +709,6 @@ function renderProducts() {
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                     </svg>
-                    Delete
                 </button>
             </div>
         </div>
@@ -660,9 +721,9 @@ function renderProducts() {
 
 function openAddProductModal() {
     state.editingProductId = null;
-    productModalTitle.textContent = 'Add New Product';
-    productForm.reset();
-    productModal.classList.add('active');
+    if (productModalTitle) productModalTitle.textContent = 'Add New Product';
+    if (productForm) productForm.reset();
+    if (productModal) productModal.classList.add('active');
     document.body.style.overflow = 'hidden';
 }
 
@@ -671,31 +732,43 @@ window.editProduct = function(productId) {
     if (!product) return;
     
     state.editingProductId = productId;
-    productModalTitle.textContent = 'Edit Product';
+    if (productModalTitle) productModalTitle.textContent = 'Edit Product';
     
-    document.getElementById('productName').value = product.name;
-    document.getElementById('productCategory').value = product.category;
-    document.getElementById('productPrice').value = product.price;
-    document.getElementById('productDescription').value = product.description || '';
-    document.getElementById('productImage').value = product.imageUrl || '';
+    const nameInput = document.getElementById('productName');
+    const categoryInput = document.getElementById('productCategory');
+    const priceInput = document.getElementById('productPrice');
+    const descInput = document.getElementById('productDescription');
+    const imageInput = document.getElementById('productImage');
     
-    productModal.classList.add('active');
+    if (nameInput) nameInput.value = product.name;
+    if (categoryInput) categoryInput.value = product.category;
+    if (priceInput) priceInput.value = product.price;
+    if (descInput) descInput.value = product.description || '';
+    if (imageInput) imageInput.value = product.imageUrl || '';
+    
+    if (productModal) productModal.classList.add('active');
     document.body.style.overflow = 'hidden';
 }
 
 window.closeProductModal = function() {
-    productModal.classList.remove('active');
+    if (productModal) productModal.classList.remove('active');
     document.body.style.overflow = '';
-    productForm.reset();
+    if (productForm) productForm.reset();
     state.editingProductId = null;
 }
 
 async function handleSaveProduct() {
-    const name = document.getElementById('productName').value.trim();
-    const category = document.getElementById('productCategory').value;
-    const price = parseInt(document.getElementById('productPrice').value);
-    const description = document.getElementById('productDescription').value.trim();
-    const imageUrl = document.getElementById('productImage').value.trim();
+    const nameInput = document.getElementById('productName');
+    const categoryInput = document.getElementById('productCategory');
+    const priceInput = document.getElementById('productPrice');
+    const descInput = document.getElementById('productDescription');
+    const imageInput = document.getElementById('productImage');
+    
+    const name = nameInput ? nameInput.value.trim() : '';
+    const category = categoryInput ? categoryInput.value : '';
+    const price = priceInput ? parseInt(priceInput.value) : 0;
+    const description = descInput ? descInput.value.trim() : '';
+    const imageUrl = imageInput ? imageInput.value.trim() : '';
     
     if (!name || !category || !price) {
         showToast('Please fill all required fields', 'error');
@@ -713,8 +786,10 @@ async function handleSaveProduct() {
     };
     
     try {
-        saveProductBtn.disabled = true;
-        saveProductBtn.textContent = 'Saving...';
+        if (saveProductBtn) {
+            saveProductBtn.disabled = true;
+            saveProductBtn.textContent = 'Saving...';
+        }
         
         if (state.editingProductId) {
             // Update existing product
@@ -733,8 +808,10 @@ async function handleSaveProduct() {
         console.error('❌ Save product error:', error);
         showToast('Failed to save product', 'error');
     } finally {
-        saveProductBtn.disabled = false;
-        saveProductBtn.textContent = 'Save Product';
+        if (saveProductBtn) {
+            saveProductBtn.disabled = false;
+            saveProductBtn.textContent = 'Save Product';
+        }
     }
 }
 
@@ -757,7 +834,7 @@ window.deleteProduct = async function(productId) {
 // ============================================
 
 function handleExportExcel() {
-    const period = reportPeriod.value;
+    const period = reportPeriod ? reportPeriod.value : 'all';
     const data = getFilteredOrders(period);
     
     if (data.length === 0) {
@@ -765,8 +842,8 @@ function handleExportExcel() {
         return;
     }
     
-    // Create Excel-like CSV format
-    let csv = '\uFEFF'; // BOM for Excel UTF-8
+    // Create Excel-like CSV format with BOM for UTF-8
+    let csv = '\uFEFF';
     csv += 'KoYun Coffee - Sales Report\n';
     csv += `Period: ${formatPeriodName(period)}\n`;
     csv += `Generated: ${new Date().toLocaleString('id-ID')}\n\n`;
@@ -793,7 +870,7 @@ function handleExportExcel() {
 }
 
 function handleExportCSV() {
-    const period = reportPeriod.value;
+    const period = reportPeriod ? reportPeriod.value : 'all';
     const data = getFilteredOrders(period);
     
     if (data.length === 0) {
@@ -868,13 +945,13 @@ function formatPeriodName(period) {
 // ============================================
 
 window.openImageModal = function(imageUrl) {
-    modalImage.src = imageUrl;
-    imageModal.classList.add('active');
+    if (modalImage) modalImage.src = imageUrl;
+    if (imageModal) imageModal.classList.add('active');
     document.body.style.overflow = 'hidden';
 }
 
 window.closeImageModal = function() {
-    imageModal.classList.remove('active');
+    if (imageModal) imageModal.classList.remove('active');
     document.body.style.overflow = '';
 }
 
@@ -886,6 +963,10 @@ async function handleLogout() {
     if (!confirm('Logout from admin dashboard?')) return;
     
     try {
+        // Unsubscribe listeners
+        if (state.unsubscribeOrders) state.unsubscribeOrders();
+        if (state.unsubscribeProducts) state.unsubscribeProducts();
+        
         await signOut(auth);
         console.log('✅ Logged out');
         window.location.href = '/admin.html';
@@ -900,6 +981,8 @@ async function handleLogout() {
 // ============================================
 
 function updateTime() {
+    if (!currentTime) return;
+    
     const now = new Date();
     currentTime.textContent = now.toLocaleDateString('id-ID', { 
         weekday: 'short', 
@@ -931,10 +1014,10 @@ function formatTime(date) {
 
 function showToast(message, type = 'info') {
     const colors = {
-        success: 'var(--success)',
-        error: 'var(--danger)',
-        info: 'var(--info)',
-        warning: 'var(--warning)'
+        success: '#2ECC71',
+        error: '#E74C3C',
+        info: '#3498DB',
+        warning: '#F39C12'
     };
     
     const toast = document.createElement('div');
@@ -946,7 +1029,7 @@ function showToast(message, type = 'info') {
         color: white;
         padding: 16px 24px;
         border-radius: 12px;
-        box-shadow: var(--shadow-xl);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.2);
         z-index: 10000;
         font-weight: 600;
         animation: slideInRight 0.3s ease-out;
@@ -960,6 +1043,7 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+// Add animation styles
 const styleAnimations = document.createElement('style');
 styleAnimations.textContent = `
     @keyframes slideInRight {

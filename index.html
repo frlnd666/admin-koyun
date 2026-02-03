@@ -3,16 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KoYun Coffee - Management System</title>
+    <title>KoYun Coffee</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #6F4E37 0%, #A0826D 100%);
             min-height: 100vh;
             display: flex;
@@ -20,50 +14,7 @@
             justify-content: center;
             color: white;
         }
-
-        .loading-container {
-            text-align: center;
-            animation: fadeIn 0.5s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .logo {
-            font-size: 5rem;
-            margin-bottom: 20px;
-            animation: bounce 2s infinite;
-        }
-
-        @keyframes bounce {
-            0%, 100% {
-                transform: translateY(0);
-            }
-            50% {
-                transform: translateY(-20px);
-            }
-        }
-
-        h1 {
-            font-size: 2.5rem;
-            margin-bottom: 12px;
-            font-weight: 700;
-        }
-
-        p {
-            font-size: 1.1rem;
-            opacity: 0.9;
-            margin-bottom: 40px;
-        }
-
+        .loader { text-align: center; }
         .spinner {
             width: 60px;
             height: 60px;
@@ -71,28 +22,19 @@
             border-top: 6px solid white;
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin: 0 auto;
+            margin: 20px auto;
         }
-
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
-        .status-text {
-            margin-top: 24px;
-            font-size: 0.95rem;
-            opacity: 0.8;
-        }
     </style>
 </head>
 <body>
-    <div class="loading-container">
-        <div class="logo">☕</div>
-        <h1>KoYun Coffee</h1>
-        <p>Management System</p>
+    <div class="loader">
+        <h1>☕ KoYun Coffee</h1>
         <div class="spinner"></div>
-        <p class="status-text" id="statusText">Checking authentication...</p>
+        <p id="status">Loading...</p>
     </div>
 
     <script type="module">
@@ -112,86 +54,62 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const status = document.getElementById('status');
 
-        const statusText = document.getElementById('statusText');
-
-        // ✅ CHECK FLAG: Skip redirect if coming from staff creation
-        const skipRedirect = sessionStorage.getItem('skipAutoRedirect');
-        if (skipRedirect === 'true') {
-            console.log('⏭️ Skipping auto-redirect (staff creation flow)');
-            sessionStorage.removeItem('skipAutoRedirect');
-            statusText.textContent = 'Redirecting to login...';
+        // ✅ CHECK FLAG FIRST - PRIORITY TERTINGGI
+        const justCreatedStaff = localStorage.getItem('justCreatedStaff');
+        
+        if (justCreatedStaff === 'true') {
+            console.log('🔄 Staff creation flow - skip auth check, go to login');
+            status.textContent = 'Redirecting to login...';
+            localStorage.removeItem('justCreatedStaff');
             setTimeout(() => {
-                window.location.href = '/admin.html';
+                window.location.replace('/admin.html');
             }, 500);
         } else {
-            // Normal auto-redirect flow
+            // Normal auth check
+            let authCheckTimeout;
+            
+            // Timeout safety - jika auth check terlalu lama
+            authCheckTimeout = setTimeout(() => {
+                console.log('⏱️ Auth check timeout, redirect to login');
+                window.location.replace('/admin.html');
+            }, 3000);
+
             onAuthStateChanged(auth, async (user) => {
+                clearTimeout(authCheckTimeout);
+                
                 if (!user) {
-                    // Not logged in - redirect to login
-                    statusText.textContent = 'Redirecting to login...';
-                    setTimeout(() => {
-                        window.location.href = '/admin.html';
-                    }, 800);
+                    status.textContent = 'Please login...';
+                    setTimeout(() => window.location.replace('/admin.html'), 500);
                     return;
                 }
 
                 try {
-                    statusText.textContent = 'Verifying credentials...';
+                    status.textContent = 'Verifying...';
+                    const userDoc = await getDoc(doc(db, 'users', user.uid));
+
+                    if (!userDoc.exists() || userDoc.data().active === false) {
+                        await auth.signOut();
+                        window.location.replace('/admin.html');
+                        return;
+                    }
+
+                    const role = userDoc.data().role;
                     
-                    const userDocRef = doc(db, 'users', user.uid);
-                    const userDocSnap = await getDoc(userDocRef);
-
-                    if (!userDocSnap.exists()) {
-                        // User not found - logout and redirect
-                        statusText.textContent = 'User not found. Redirecting...';
-                        await auth.signOut();
-                        setTimeout(() => {
-                            window.location.href = '/admin.html';
-                        }, 1000);
-                        return;
-                    }
-
-                    const userData = userDocSnap.data();
-                    const role = userData.role;
-                    const active = userData.active;
-
-                    // Check if account is disabled
-                    if (active === false) {
-                        statusText.textContent = 'Account disabled. Redirecting...';
-                        await auth.signOut();
-                        setTimeout(() => {
-                            window.location.href = '/admin.html';
-                        }, 1000);
-                        return;
-                    }
-
-                    // Redirect based on role
                     if (role === 'admin') {
-                        statusText.textContent = 'Welcome Admin! Redirecting...';
-                        setTimeout(() => {
-                            window.location.href = '/dashboard-admin.html';
-                        }, 800);
+                        status.textContent = 'Welcome Admin!';
+                        setTimeout(() => window.location.replace('/dashboard-admin.html'), 500);
                     } else if (role === 'kasir') {
-                        statusText.textContent = 'Welcome Kasir! Redirecting...';
-                        setTimeout(() => {
-                            window.location.href = '/kasir.html';
-                        }, 800);
+                        status.textContent = 'Welcome Kasir!';
+                        setTimeout(() => window.location.replace('/kasir.html'), 500);
                     } else {
-                        // Unknown role - logout and redirect
-                        statusText.textContent = 'Invalid role. Redirecting...';
                         await auth.signOut();
-                        setTimeout(() => {
-                            window.location.href = '/admin.html';
-                        }, 1000);
+                        window.location.replace('/admin.html');
                     }
-
                 } catch (error) {
-                    console.error('❌ Auth check error:', error);
-                    statusText.textContent = 'Error occurred. Redirecting to login...';
-                    setTimeout(() => {
-                        window.location.href = '/admin.html';
-                    }, 1500);
+                    console.error('Auth error:', error);
+                    window.location.replace('/admin.html');
                 }
             });
         }

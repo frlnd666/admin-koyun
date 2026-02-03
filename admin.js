@@ -1307,3 +1307,339 @@ window.deleteStaff = async function(staffId) {
         showToast('Failed to delete staff', 'error');
     }
 }
+
+// ============================================
+// Render Expenses List
+// ============================================
+
+function renderExpensesList() {
+    if (!expensesGrid) return;
+    
+    if (state.expenses.length === 0) {
+        expensesGrid.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">💰</div>
+                <p>Click "Add Expense" to record expenses</p>
+            </div>
+        `;
+        return;
+    }
+    
+    expensesGrid.innerHTML = state.expenses.map(expense => {
+        const date = expense.date ? expense.date.toDate() : new Date();
+        
+        return `
+            <div class="expense-card">
+                <div class="expense-header">
+                    <h3>${expense.category || 'Other'}</h3>
+                    <span class="expense-amount">Rp ${expense.amount.toLocaleString('id-ID')}</span>
+                </div>
+                
+                <div class="expense-body">
+                    <p class="expense-description">${expense.description || 'No description'}</p>
+                    <span class="expense-date">${date.toLocaleDateString('id-ID', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                    })}</span>
+                </div>
+                
+                <div class="expense-actions">
+                    <button onclick="editExpense('${expense.id}')" class="btn-edit">
+                        ✏️ Edit
+                    </button>
+                    <button onclick="deleteExpense('${expense.id}')" class="btn-delete">
+                        🗑️ Delete
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ============================================
+// Expense Modal Functions
+// ============================================
+
+function openAddExpenseModal() {
+    state.editingExpenseId = null;
+    
+    const expenseModalTitle = document.getElementById('expenseModalTitle');
+    if (expenseModalTitle) expenseModalTitle.textContent = 'Add New Expense';
+    
+    if (expenseForm) expenseForm.reset();
+    
+    // Set today's date
+    const dateInput = document.getElementById('expenseDate');
+    if (dateInput) {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.value = today;
+    }
+    
+    if (expenseModal) expenseModal.style.display = 'flex';
+}
+
+window.editExpense = async function(expenseId) {
+    state.editingExpenseId = expenseId;
+    
+    const expense = state.expenses.find(e => e.id === expenseId);
+    if (!expense) return;
+    
+    const expenseModalTitle = document.getElementById('expenseModalTitle');
+    if (expenseModalTitle) expenseModalTitle.textContent = 'Edit Expense';
+    
+    // Fill form
+    const categoryInput = document.getElementById('expenseCategory');
+    const amountInput = document.getElementById('expenseAmount');
+    const descInput = document.getElementById('expenseDescription');
+    const dateInput = document.getElementById('expenseDate');
+    
+    if (categoryInput) categoryInput.value = expense.category || '';
+    if (amountInput) amountInput.value = expense.amount || 0;
+    if (descInput) descInput.value = expense.description || '';
+    if (dateInput && expense.date) {
+        const date = expense.date.toDate();
+        dateInput.value = date.toISOString().split('T')[0];
+    }
+    
+    if (expenseModal) expenseModal.style.display = 'flex';
+}
+
+window.closeExpenseModal = function() {
+    if (expenseModal) expenseModal.style.display = 'none';
+    if (expenseForm) expenseForm.reset();
+    state.editingExpenseId = null;
+}
+
+// ============================================
+// Save Expense (Create/Update)
+// ============================================
+
+async function handleSaveExpense() {
+    const categoryInput = document.getElementById('expenseCategory');
+    const amountInput = document.getElementById('expenseAmount');
+    const descInput = document.getElementById('expenseDescription');
+    const dateInput = document.getElementById('expenseDate');
+    
+    const category = categoryInput ? categoryInput.value.trim() : '';
+    const amount = amountInput ? parseFloat(amountInput.value) : 0;
+    const description = descInput ? descInput.value.trim() : '';
+    const dateValue = dateInput ? dateInput.value : '';
+    
+    if (!category || amount <= 0 || !dateValue) {
+        showToast('Please fill all required fields', 'error');
+        return;
+    }
+    
+    try {
+        if (saveExpenseBtn) {
+            saveExpenseBtn.disabled = true;
+            saveExpenseBtn.textContent = 'Saving...';
+        }
+        
+        const expenseData = {
+            category,
+            amount,
+            description,
+            date: Timestamp.fromDate(new Date(dateValue)),
+            updatedAt: Timestamp.now()
+        };
+        
+        if (state.editingExpenseId) {
+            // Update existing
+            await updateDoc(doc(db, 'expenses', state.editingExpenseId), expenseData);
+            showToast('Expense updated successfully', 'success');
+        } else {
+            // Create new
+            expenseData.createdAt = Timestamp.now();
+            await addDoc(collection(db, 'expenses'), expenseData);
+            showToast('Expense added successfully', 'success');
+        }
+        
+        closeExpenseModal();
+        
+    } catch (error) {
+        console.error('❌ Save expense error:', error);
+        showToast('Failed to save expense', 'error');
+    } finally {
+        if (saveExpenseBtn) {
+            saveExpenseBtn.disabled = false;
+            saveExpenseBtn.textContent = 'Save Expense';
+        }
+    }
+}
+
+// ============================================
+// Delete Expense
+// ============================================
+
+window.deleteExpense = async function(expenseId) {
+    if (!confirm('Delete this expense? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        await deleteDoc(doc(db, 'expenses', expenseId));
+        showToast('Expense deleted successfully', 'success');
+    } catch (error) {
+        console.error('❌ Delete expense error:', error);
+        showToast('Failed to delete expense', 'error');
+    }
+}
+
+// ============================================
+// Update Profit/Loss Card
+// ============================================
+
+function updateProfitLoss() {
+    if (!profitLossCard) return;
+    
+    // Calculate total revenue (completed orders)
+    const totalRevenue = state.orders
+        .filter(o => o.status === 'completed')
+        .reduce((sum, o) => sum + (o.total || 0), 0);
+    
+    // Calculate total expenses
+    const totalExpenses = state.expenses
+        .reduce((sum, e) => sum + (e.amount || 0), 0);
+    
+    // Calculate net profit
+    const netProfit = totalRevenue - totalExpenses;
+    const profitMargin = totalRevenue > 0 
+        ? ((netProfit / totalRevenue) * 100).toFixed(1) 
+        : '0.0';
+    
+    profitLossCard.innerHTML = `
+        <div class="profit-loss-item">
+            <span class="profit-loss-label">Total Revenue</span>
+            <span class="profit-loss-value revenue">Rp ${totalRevenue.toLocaleString('id-ID')}</span>
+        </div>
+        
+        <div class="profit-loss-item">
+            <span class="profit-loss-label">Total Expenses</span>
+            <span class="profit-loss-value expenses">Rp ${totalExpenses.toLocaleString('id-ID')}</span>
+        </div>
+        
+        <div class="profit-loss-divider"></div>
+        
+        <div class="profit-loss-item">
+            <span class="profit-loss-label">Net Profit</span>
+            <span class="profit-loss-value ${netProfit >= 0 ? 'profit' : 'loss'}">
+                Rp ${netProfit.toLocaleString('id-ID')}
+            </span>
+        </div>
+        
+        <div class="profit-loss-margin">
+            Margin: ${profitMargin}%
+        </div>
+    `;
+}
+
+// ============================================
+// Render Analytics
+// ============================================
+
+function renderAnalytics() {
+    renderSalesChart();
+    renderTopProducts();
+    updateProfitLoss();
+}
+
+function renderSalesChart() {
+    if (!analyticsChart) return;
+    
+    // Get last 7 days data
+    const last7Days = [];
+    const today = new Date();
+    
+    for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        date.setHours(0, 0, 0, 0);
+        
+        const dayOrders = state.orders.filter(order => {
+            if (!order.createdAt) return false;
+            const orderDate = order.createdAt.toDate();
+            return orderDate.toDateString() === date.toDateString() && order.status === 'completed';
+        });
+        
+        const dayRevenue = dayOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+        
+        last7Days.push({
+            date: date.toLocaleDateString('id-ID', { weekday: 'short' }),
+            revenue: dayRevenue,
+            orders: dayOrders.length
+        });
+    }
+    
+    // Simple bar chart
+    const maxRevenue = Math.max(...last7Days.map(d => d.revenue), 1);
+    
+    analyticsChart.innerHTML = `
+        <div class="chart-bars">
+            ${last7Days.map(day => {
+                const height = (day.revenue / maxRevenue) * 100;
+                return `
+                    <div class="chart-bar-wrapper">
+                        <div class="chart-bar" style="height: ${height}%">
+                            <span class="chart-value">Rp ${(day.revenue / 1000).toFixed(0)}k</span>
+                        </div>
+                        <span class="chart-label">${day.date}</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+function renderTopProducts() {
+    if (!topProductsList) return;
+    
+    // Count product sales
+    const productSales = {};
+    
+    state.orders
+        .filter(o => o.status === 'completed')
+        .forEach(order => {
+            if (order.items) {
+                order.items.forEach(item => {
+                    if (!productSales[item.name]) {
+                        productSales[item.name] = {
+                            name: item.name,
+                            quantity: 0,
+                            revenue: 0
+                        };
+                    }
+                    productSales[item.name].quantity += item.quantity;
+                    productSales[item.name].revenue += item.price * item.quantity;
+                });
+            }
+        });
+    
+    // Sort by revenue
+    const topProducts = Object.values(productSales)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5);
+    
+    if (topProducts.length === 0) {
+        topProductsList.innerHTML = `
+            <div class="empty-state-small">
+                <p>No sales data yet</p>
+            </div>
+        `;
+        return;
+    }
+    
+    topProductsList.innerHTML = topProducts.map((product, index) => `
+        <div class="top-product-item">
+            <div class="top-product-rank">${index + 1}</div>
+            <div class="top-product-info">
+                <strong>${product.name}</strong>
+                <span class="top-product-quantity">${product.quantity} sold</span>
+            </div>
+            <div class="top-product-revenue">
+                Rp ${product.revenue.toLocaleString('id-ID')}
+            </div>
+        </div>
+    `).join('');
+}

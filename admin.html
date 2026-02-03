@@ -11,233 +11,214 @@
             box-sizing: border-box;
         }
 
-        :root {
-            --primary: #6F4E37;
-            --secondary: #A0826D;
-            --bg: #FAF7F2;
-            --bg-card: #FFFFFF;
-            --text-primary: #2C2C2C;
-            --text-secondary: #666666;
-            --success: #2ECC71;
-            --danger: #E74C3C;
-        }
-
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            background: linear-gradient(135deg, #6F4E37 0%, #A0826D 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
         }
 
         .login-container {
-            background: var(--bg-card);
-            border-radius: 24px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            padding: 48px;
-            width: 100%;
-            max-width: 450px;
-            animation: slideUp 0.5s ease-out;
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            width: 90%;
+            max-width: 400px;
         }
 
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .logo {
+        h1 {
             text-align: center;
-            margin-bottom: 32px;
+            color: #6F4E37;
+            margin-bottom: 10px;
+            font-size: 2rem;
         }
 
-        .logo h1 {
-            color: var(--primary);
-            font-size: 2.5rem;
-            margin-bottom: 8px;
-        }
-
-        .logo p {
-            color: var(--text-secondary);
-            font-size: 1rem;
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
         }
 
         .form-group {
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
 
-        .form-group label {
+        label {
             display: block;
             margin-bottom: 8px;
-            color: var(--text-primary);
-            font-weight: 600;
-            font-size: 0.9rem;
+            color: #333;
+            font-weight: 500;
         }
 
-        .form-group input {
+        input {
             width: 100%;
-            padding: 14px 16px;
-            border: 2px solid #E0E0E0;
-            border-radius: 12px;
-            font-size: 1rem;
-            transition: all 0.3s;
-            background: var(--bg);
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
         }
 
-        .form-group input:focus {
+        input:focus {
             outline: none;
-            border-color: var(--primary);
-            background: white;
+            border-color: #6F4E37;
         }
 
         .btn-login {
             width: 100%;
-            padding: 16px;
-            background: var(--primary);
+            padding: 14px;
+            background: #6F4E37;
             color: white;
             border: none;
-            border-radius: 12px;
-            font-size: 1.1rem;
-            font-weight: 700;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
-            margin-top: 8px;
+            transition: background 0.3s;
         }
 
         .btn-login:hover {
-            background: var(--secondary);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(111, 78, 55, 0.3);
-        }
-
-        .btn-login:active {
-            transform: translateY(0);
+            background: #5a3d2a;
         }
 
         .btn-login:disabled {
-            background: #CCCCCC;
+            background: #ccc;
             cursor: not-allowed;
-            transform: none;
         }
 
-        .error-message {
-            background: #FFE5E5;
-            color: var(--danger);
-            padding: 12px 16px;
+        #message {
+            margin-top: 15px;
+            padding: 12px;
             border-radius: 8px;
-            margin-bottom: 16px;
-            display: none;
-            font-size: 0.9rem;
-        }
-
-        .error-message.show {
-            display: block;
-            animation: shake 0.5s;
-        }
-
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-10px); }
-            75% { transform: translateX(10px); }
-        }
-
-        .loading {
-            display: none;
             text-align: center;
-            padding: 20px;
+            display: none;
         }
 
-        .loading.show {
-            display: block;
+        .success {
+            background: #d1fae5;
+            color: #065f46;
         }
 
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid var(--primary);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .footer {
-            text-align: center;
-            margin-top: 24px;
-            color: var(--text-secondary);
-            font-size: 0.85rem;
-        }
-
-        @media (max-width: 480px) {
-            .login-container {
-                padding: 32px 24px;
-            }
-
-            .logo h1 {
-                font-size: 2rem;
-            }
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
         }
     </style>
 </head>
 <body>
     <div class="login-container">
-        <div class="logo">
-            <h1>☕ KoYun Coffee</h1>
-            <p>Management System</p>
-        </div>
-
-        <div id="errorMessage" class="error-message"></div>
-
+        <h1>☕ KoYun Coffee</h1>
+        <p class="subtitle">Admin Login</p>
+        
         <form id="loginForm">
             <div class="form-group">
                 <label for="email">Email</label>
-                <input 
-                    type="email" 
-                    id="email" 
-                    name="email" 
-                    placeholder="admin@koyun.com" 
-                    required
-                    autocomplete="email">
+                <input type="email" id="email" required autocomplete="email">
             </div>
-
+            
             <div class="form-group">
                 <label for="password">Password</label>
-                <input 
-                    type="password" 
-                    id="password" 
-                    name="password" 
-                    placeholder="••••••••" 
-                    required
-                    autocomplete="current-password">
+                <input type="password" id="password" required autocomplete="current-password">
             </div>
-
-            <button type="submit" id="loginBtn" class="btn-login">
-                Login
-            </button>
+            
+            <button type="submit" id="loginBtn" class="btn-login">Login</button>
+            
+            <div id="message"></div>
         </form>
-
-        <div id="loading" class="loading">
-            <div class="spinner"></div>
-            <p style="margin-top: 12px; color: var(--text-secondary);">Logging in...</p>
-        </div>
-
-        <div class="footer">
-            <p>© 2026 KoYun Coffee. All rights reserved.</p>
-        </div>
     </div>
 
-    <script type="module" src="admin.js"></script>
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, signInWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDOUb7G6NBe2IKTyLYKFYyf7e0uiNoDoBs",
+            authDomain: "koyun-id.firebaseapp.com",
+            projectId: "koyun-id",
+            storageBucket: "koyun-id.firebasestorage.app",
+            messagingSenderId: "672101013741",
+            appId: "1:672101013741:web:64b367d77ec8df8ecf14e4"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const loginForm = document.getElementById('loginForm');
+        const loginBtn = document.getElementById('loginBtn');
+        const message = document.getElementById('message');
+
+        function showMessage(text, type) {
+            message.textContent = text;
+            message.className = type;
+            message.style.display = 'block';
+        }
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Logging in...';
+            
+            try {
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+                
+                // Get user role
+                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                
+                if (!userDoc.exists()) {
+                    showMessage('User data not found', 'error');
+                    await auth.signOut();
+                    return;
+                }
+                
+                const userData = userDoc.data();
+                
+                if (userData.active === false) {
+                    showMessage('Account is disabled', 'error');
+                    await auth.signOut();
+                    return;
+                }
+                
+                showMessage('Login successful! Redirecting...', 'success');
+                
+                // Redirect based on role
+                setTimeout(() => {
+                    if (userData.role === 'admin') {
+                        window.location.href = '/dashboard-admin.html';
+                    } else if (userData.role === 'kasir') {
+                        window.location.href = '/kasir.html';
+                    } else {
+                        showMessage('Invalid role', 'error');
+                    }
+                }, 1000);
+                
+            } catch (error) {
+                console.error('Login error:', error);
+                if (error.code === 'auth/invalid-credential') {
+                    showMessage('Invalid email or password', 'error');
+                } else {
+                    showMessage('Login failed: ' + error.message, 'error');
+                }
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login';
+            }
+        });
+
+        // ✅ CLEAR justCreatedStaff FLAG saat halaman load
+        if (localStorage.getItem('justCreatedStaff') === 'true') {
+            console.log('✅ Staff creation successful. Ready for admin login.');
+            localStorage.removeItem('justCreatedStaff');
+        }
+    </script>
 </body>
 </html>

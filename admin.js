@@ -316,3 +316,366 @@ function initCloudinaryWidget() {
         }
     });
 }
+
+// ============================================
+// Event Listeners
+// ============================================
+
+function setupEventListeners() {
+    // Sidebar toggle
+    if (menuToggle) {
+        menuToggle.addEventListener('click', () => {
+            if (sidebar) sidebar.classList.add('active');
+        });
+    }
+    
+    if (closeSidebar) {
+        closeSidebar.addEventListener('click', () => {
+            if (sidebar) sidebar.classList.remove('active');
+        });
+    }
+    
+    // Navigation
+    navItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const section = item.dataset.section;
+            switchToSection(section);
+            
+            if (window.innerWidth <= 1024) {
+                if (sidebar) sidebar.classList.remove('active');
+            }
+        });
+    });
+    
+    // Filter tabs
+    filterTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const filter = tab.dataset.filter;
+            state.currentFilter = filter;
+            
+            filterTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            renderOrders();
+        });
+    });
+    
+    // Date filter
+    if (dateFilter) {
+        dateFilter.addEventListener('change', (e) => {
+            state.currentDateFilter = e.target.value;
+            
+            if (e.target.value === 'custom') {
+                if (customDateStart) customDateStart.style.display = 'block';
+                if (customDateEnd) customDateEnd.style.display = 'block';
+            } else {
+                if (customDateStart) customDateStart.style.display = 'none';
+                if (customDateEnd) customDateEnd.style.display = 'none';
+                renderOrders();
+                updateStats();
+            }
+        });
+    }
+    
+    // Custom date range
+    if (customDateStart) {
+        customDateStart.addEventListener('change', (e) => {
+            state.customDateRange.start = new Date(e.target.value);
+            if (state.customDateRange.end) {
+                renderOrders();
+                updateStats();
+            }
+        });
+    }
+    
+    if (customDateEnd) {
+        customDateEnd.addEventListener('change', (e) => {
+            state.customDateRange.end = new Date(e.target.value);
+            state.customDateRange.end.setHours(23, 59, 59, 999);
+            if (state.customDateRange.start) {
+                renderOrders();
+                updateStats();
+            }
+        });
+    }
+    
+    // Refresh
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            refreshBtn.style.transform = 'rotate(360deg)';
+            setTimeout(() => refreshBtn.style.transform = '', 500);
+            showToast('Data refreshed', 'success');
+        });
+    }
+    
+    // Logout
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
+    
+    // Product buttons
+    if (addProductBtn) {
+        addProductBtn.addEventListener('click', openAddProductModal);
+    }
+    
+    if (saveProductBtn) {
+        saveProductBtn.addEventListener('click', handleSaveProduct);
+    }
+    
+    if (uploadImageBtn) {
+        uploadImageBtn.addEventListener('click', () => {
+            if (state.cloudinaryWidget) {
+                state.cloudinaryWidget.open();
+            } else {
+                showToast('Image uploader not ready', 'error');
+            }
+        });
+    }
+    
+    // Staff buttons
+    if (addStaffBtn) {
+        addStaffBtn.addEventListener('click', openAddStaffModal);
+    }
+    
+    if (saveStaffBtn) {
+        saveStaffBtn.addEventListener('click', handleSaveStaff);
+    }
+    
+    // Expense buttons
+    if (addExpenseBtn) {
+        addExpenseBtn.addEventListener('click', openAddExpenseModal);
+    }
+    
+    if (saveExpenseBtn) {
+        saveExpenseBtn.addEventListener('click', handleSaveExpense);
+    }
+    
+    // Export buttons
+    if (exportExcel) {
+        exportExcel.addEventListener('click', handleExportExcel);
+    }
+    
+    if (exportCSV) {
+        exportCSV.addEventListener('click', handleExportCSV);
+    }
+    
+    if (exportPDF) {
+        exportPDF.addEventListener('click', handleExportPDF);
+    }
+}
+
+// ============================================
+// Section Switching
+// ============================================
+
+window.switchToSection = function(section) {
+    state.currentSection = section;
+    
+    navItems.forEach(item => {
+        if (item.dataset.section === section) {
+            item.classList.add('active');
+        } else {
+            item.classList.remove('active');
+        }
+    });
+    
+    const titles = {
+        'dashboard': 'Dashboard Overview',
+        'orders': 'Orders Management',
+        'products': 'Product Management',
+        'analytics': 'Sales Analytics',
+        'reports': 'Export Reports',
+        'settings': 'System Settings'
+    };
+    
+    if (pageTitle) pageTitle.textContent = titles[section] || 'Dashboard';
+    
+    document.querySelectorAll('.content-section').forEach(sec => {
+        sec.classList.remove('active');
+    });
+    
+    const targetSection = document.getElementById(section + 'Section');
+    if (targetSection) {
+        targetSection.classList.add('active');
+    }
+    
+    // Load section-specific data
+    if (section === 'analytics') {
+        renderAnalytics();
+    } else if (section === 'settings') {
+        renderStaffList();
+        renderExpensesList();
+    }
+}
+
+// ============================================
+// Real-time Listeners
+// ============================================
+
+function startRealtimeOrders() {
+    console.log('👂 Starting real-time orders listener...');
+    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+    
+    if (state.unsubscribeOrders) state.unsubscribeOrders();
+    
+    state.unsubscribeOrders = onSnapshot(q, (snapshot) => {
+        console.log('📡 Orders update:', snapshot.size, 'orders');
+        state.orders = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        updateStats();
+        renderOrders();
+        renderRecentOrders();
+    }, (error) => {
+        console.error('❌ Orders listener error:', error);
+        showToast('Failed to load orders', 'error');
+    });
+}
+
+function startRealtimeProducts() {
+    console.log('👂 Starting real-time products listener...');
+    const q = query(collection(db, 'products'), orderBy('name'));
+    
+    if (state.unsubscribeProducts) state.unsubscribeProducts();
+    
+    state.unsubscribeProducts = onSnapshot(q, (snapshot) => {
+        console.log('📡 Products update:', snapshot.size, 'products');
+        state.products = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        renderProducts();
+    }, (error) => {
+        console.error('❌ Products listener error:', error);
+        showToast('Failed to load products', 'error');
+    });
+}
+
+function startRealtimeStaff() {
+    console.log('👂 Starting real-time staff listener...');
+    const q = query(collection(db, 'users'), where('role', '==', 'kasir'));
+    
+    if (state.unsubscribeStaff) state.unsubscribeStaff();
+    
+    state.unsubscribeStaff = onSnapshot(q, (snapshot) => {
+        console.log('📡 Staff update:', snapshot.size, 'staff members');
+        state.staff = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        renderStaffList();
+    }, (error) => {
+        console.error('❌ Staff listener error:', error);
+        showToast('Failed to load staff', 'error');
+    });
+}
+
+function startRealtimeExpenses() {
+    console.log('👂 Starting real-time expenses listener...');
+    const q = query(collection(db, 'expenses'), orderBy('date', 'desc'));
+    
+    if (state.unsubscribeExpenses) state.unsubscribeExpenses();
+    
+    state.unsubscribeExpenses = onSnapshot(q, (snapshot) => {
+        console.log('📡 Expenses update:', snapshot.size, 'expenses');
+        state.expenses = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        renderExpensesList();
+        updateProfitLoss();
+    }, (error) => {
+        console.error('❌ Expenses listener error:', error);
+        showToast('Failed to load expenses', 'error');
+    });
+}
+
+// ============================================
+// Update Statistics with Date Filter
+// ============================================
+
+function updateStats() {
+    const filtered = getFilteredOrdersByDate();
+    
+    const pending = filtered.filter(o => o.status === 'pending').length;
+    const processing = filtered.filter(o => o.status === 'processing').length;
+    const completed = filtered.filter(o => o.status === 'completed').length;
+    const revenue = filtered
+        .filter(o => o.status === 'completed')
+        .reduce((sum, o) => sum + (o.total || 0), 0);
+    
+    // Dashboard stats
+    if (dashPending) dashPending.textContent = pending;
+    if (dashProcessing) dashProcessing.textContent = processing;
+    if (dashCompleted) dashCompleted.textContent = completed;
+    if (dashRevenue) dashRevenue.textContent = `Rp ${revenue.toLocaleString('id-ID')}`;
+    
+    // Orders section stats
+    if (statPending) statPending.textContent = pending;
+    if (statProcessing) statProcessing.textContent = processing;
+    if (statCompleted) statCompleted.textContent = completed;
+    if (statRevenue) statRevenue.textContent = `Rp ${revenue.toLocaleString('id-ID')}`;
+    if (pendingBadge) pendingBadge.textContent = pending;
+    
+    // Filter counts
+    const allFiltered = getFilteredOrdersByDate();
+    if (countAll) countAll.textContent = allFiltered.length;
+    if (countPending) countPending.textContent = allFiltered.filter(o => o.status === 'pending').length;
+    if (countProcessing) countProcessing.textContent = allFiltered.filter(o => o.status === 'processing').length;
+    if (countCompleted) countCompleted.textContent = allFiltered.filter(o => o.status === 'completed').length;
+}
+
+// ============================================
+// Get Filtered Orders by Date
+// ============================================
+
+function getFilteredOrdersByDate() {
+    const now = new Date();
+    let startDate, endDate;
+    
+    switch(state.currentDateFilter) {
+        case 'today':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            break;
+            
+        case 'yesterday':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+            break;
+            
+        case 'week':
+            const dayOfWeek = now.getDay();
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            break;
+            
+        case 'month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+            break;
+            
+        case 'custom':
+            if (!state.customDateRange.start || !state.customDateRange.end) {
+                return state.orders;
+            }
+            startDate = state.customDateRange.start;
+            endDate = state.customDateRange.end;
+            break;
+            
+        default: // 'all'
+            return state.orders;
+    }
+    
+    return state.orders.filter(order => {
+        if (!order.createdAt) return false;
+        const orderDate = order.createdAt.toDate();
+        return orderDate >= startDate && orderDate <= endDate;
+    });
+}

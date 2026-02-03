@@ -1191,55 +1191,48 @@ async function handleSaveStaff() {
             closeStaffModal();
             
         } else {
-            // ✅ CREATE NEW STAFF - FIXED VERSION (NO INFINITE LOOP)
-            
-            // Check if email already exists
-            console.log('🔍 Checking if email already exists...');
-            const usersRef = collection(db, 'users');
-            const q = query(usersRef, where('email', '==', email));
-            const querySnapshot = await getDocs(q);
-            
-            if (!querySnapshot.empty) {
-                showToast('Email already registered', 'error');
-                return;
-            }
-            
-            console.log('🔐 Creating new staff account...');
-            
-            // Save current admin user info
-            const currentUser = auth.currentUser;
-            const currentUserEmail = currentUser.email;
-            
-            // Create new user (this will LOGOUT admin temporarily)
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            console.log('✅ New user created:', userCredential.user.uid);
-            
-            // Store staff data in Firestore
-            await setDoc(doc(db, 'users', userCredential.user.uid), {
-                email,
-                name,
-                role: 'kasir',
-                active: true,
-                createdAt: Timestamp.now(),
-                updatedAt: Timestamp.now()
-            });
-            
-            console.log('✅ Staff data saved to Firestore');
-            
-            // ⚠️ CRITICAL FIX: Logout the newly created user
-            await signOut(auth);
-            console.log('🔄 Logged out new user, preparing to reload...');
-            
-            // Show success message before reload
-            showToast('Staff created! Reloading dashboard...', 'success');
-            
-            // ✅ FORCE RELOAD to re-authenticate admin
-            // This will trigger onAuthStateChanged and admin will login again
-            setTimeout(() => {
-                window.location.reload();
-            }, 1500);
-            
-            return; // Stop execution
+            // ✅ CREATE NEW STAFF - ULTIMATE FIX (NO INFINITE LOOP)
+
+console.log('🔐 Creating new staff account...');
+
+// Create new user
+const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+console.log('✅ New user created:', userCredential.user.uid);
+
+// Store staff data in Firestore
+await setDoc(doc(db, 'users', userCredential.user.uid), {
+    email,
+    name,
+    role: 'kasir',
+    active: true,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now()
+});
+
+console.log('✅ Staff data saved to Firestore');
+
+// ⚠️ CRITICAL FIX: Logout kasir baru
+await signOut(auth);
+console.log('🔄 Logged out new staff user');
+
+// ✅ SET FLAG untuk skip auth check di index.html
+localStorage.setItem('justCreatedStaff', 'true');
+
+// ✅ CLEAR semua auth state
+sessionStorage.clear();
+
+console.log('✅ Flag set, auth cleared. Redirecting to login...');
+
+// Show success message
+showToast('Staff created successfully! Please login again as admin.', 'success');
+
+// ✅ REDIRECT dengan replace (NO HISTORY, NO LOOP)
+setTimeout(() => {
+    window.location.replace('/admin.html');
+}, 1500);
+
+return; // Stop execution
+
         }
         
     } catch (error) {

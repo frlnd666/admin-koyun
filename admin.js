@@ -679,3 +679,363 @@ function getFilteredOrdersByDate() {
         return orderDate >= startDate && orderDate <= endDate;
     });
 }
+// ============================================
+// Render Orders
+// ============================================
+
+function renderOrders() {
+    if (!ordersGrid) return;
+    
+    const dateFiltered = getFilteredOrdersByDate();
+    const filtered = state.currentFilter === 'all' 
+        ? dateFiltered 
+        : dateFiltered.filter(o => o.status === state.currentFilter);
+    
+    if (filtered.length === 0) {
+        ordersGrid.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">📦</div>
+                <p>No ${state.currentFilter === 'all' ? '' : state.currentFilter} orders for selected date range</p>
+            </div>
+        `;
+        return;
+    }
+    
+    ordersGrid.innerHTML = filtered.map(order => {
+        const date = order.createdAt ? order.createdAt.toDate() : new Date();
+        const items = order.items ? order.items.map(item => 
+            `${item.quantity}x ${item.name}`
+        ).join(', ') : 'No items';
+        
+        const statusColors = {
+            'pending': '#f59e0b',
+            'processing': '#3b82f6',
+            'completed': '#10b981'
+        };
+        
+        return `
+            <div class="order-card" data-order-id="${order.id}">
+                <div class="order-header">
+                    <div class="order-info">
+                        <h3>Table ${order.tableNumber}</h3>
+                        <span class="order-time">${date.toLocaleString('id-ID', {
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })}</span>
+                    </div>
+                    <div class="order-status" style="background: ${statusColors[order.status]}">
+                        ${order.status}
+                    </div>
+                </div>
+                
+                <div class="order-items">
+                    <p>${items}</p>
+                </div>
+                
+                <div class="order-footer">
+                    <div class="order-total">
+                        <span>Total:</span>
+                        <strong>Rp ${order.total.toLocaleString('id-ID')}</strong>
+                    </div>
+                    <div class="order-payment">
+                        <span>${order.paymentMethod || 'Cash'}</span>
+                    </div>
+                </div>
+                
+                ${order.proofImage ? `
+                    <div class="order-proof">
+                        <img src="${order.proofImage}" alt="Payment Proof" 
+                             onclick="showImageModal('${order.proofImage}')" 
+                             style="cursor: pointer; max-width: 100px; border-radius: 8px;">
+                    </div>
+                ` : ''}
+                
+                <div class="order-actions">
+                    ${order.status === 'pending' ? `
+                        <button onclick="updateOrderStatus('${order.id}', 'processing')" class="btn-processing">
+                            Process
+                        </button>
+                    ` : ''}
+                    ${order.status === 'processing' ? `
+                        <button onclick="updateOrderStatus('${order.id}', 'completed')" class="btn-complete">
+                            Complete
+                        </button>
+                    ` : ''}
+                    <button onclick="deleteOrder('${order.id}')" class="btn-delete">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ============================================
+// Render Recent Orders (Dashboard)
+// ============================================
+
+function renderRecentOrders() {
+    if (!recentOrdersList) return;
+    
+    const recent = state.orders.slice(0, 5);
+    
+    if (recent.length === 0) {
+        recentOrdersList.innerHTML = `
+            <div class="empty-state-small">
+                <p>No recent orders</p>
+            </div>
+        `;
+        return;
+    }
+    
+    recentOrdersList.innerHTML = recent.map(order => {
+        const date = order.createdAt ? order.createdAt.toDate() : new Date();
+        const time = date.toLocaleTimeString('id-ID', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        return `
+            <div class="recent-order-item">
+                <div class="recent-order-info">
+                    <strong>Table ${order.tableNumber}</strong>
+                    <span class="recent-order-status status-${order.status}">${order.status}</span>
+                </div>
+                <div class="recent-order-meta">
+                    <span class="recent-order-total">Rp ${order.total.toLocaleString('id-ID')}</span>
+                    <span class="recent-order-time">${time}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ============================================
+// Render Products
+// ============================================
+
+function renderProducts() {
+    if (!productsGrid) return;
+    
+    if (state.products.length === 0) {
+        productsGrid.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">🍽️</div>
+                <p>Click "Add Product" to create your first product</p>
+            </div>
+        `;
+        return;
+    }
+    
+    productsGrid.innerHTML = state.products.map(product => `
+        <div class="product-card">
+            ${product.image ? `
+                <div class="product-image">
+                    <img src="${product.image}" alt="${product.name}" 
+                         onclick="showImageModal('${product.image}')" 
+                         style="cursor: pointer;">
+                </div>
+            ` : `
+                <div class="product-image-placeholder">
+                    <span>📷</span>
+                </div>
+            `}
+            
+            <div class="product-info">
+                <h3>${product.name}</h3>
+                <p class="product-description">${product.description || 'No description'}</p>
+                <div class="product-price">Rp ${product.price.toLocaleString('id-ID')}</div>
+            </div>
+            
+            <div class="product-stock ${product.stock > 0 ? 'in-stock' : 'out-of-stock'}">
+                Stock: ${product.stock}
+            </div>
+            
+            <div class="product-actions">
+                <button onclick="editProduct('${product.id}')" class="btn-edit">
+                    ✏️ Edit
+                </button>
+                <button onclick="deleteProduct('${product.id}')" class="btn-delete">
+                    🗑️ Delete
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ============================================
+// Order Status Update
+// ============================================
+
+window.updateOrderStatus = async function(orderId, newStatus) {
+    try {
+        await updateDoc(doc(db, 'orders', orderId), {
+            status: newStatus,
+            updatedAt: Timestamp.now()
+        });
+        
+        showToast(`Order updated to ${newStatus}`, 'success');
+    } catch (error) {
+        console.error('❌ Update order error:', error);
+        showToast('Failed to update order', 'error');
+    }
+}
+
+// ============================================
+// Delete Order
+// ============================================
+
+window.deleteOrder = async function(orderId) {
+    if (!confirm('Delete this order? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        await deleteDoc(doc(db, 'orders', orderId));
+        showToast('Order deleted successfully', 'success');
+    } catch (error) {
+        console.error('❌ Delete order error:', error);
+        showToast('Failed to delete order', 'error');
+    }
+}
+
+// ============================================
+// Product Modal Functions
+// ============================================
+
+function openAddProductModal() {
+    state.editingProductId = null;
+    
+    if (productModalTitle) productModalTitle.textContent = 'Add New Product';
+    if (productForm) productForm.reset();
+    if (productImagePreview) productImagePreview.style.display = 'none';
+    
+    state.uploadedImageUrl = '';
+    
+    if (productModal) productModal.style.display = 'flex';
+}
+
+window.editProduct = async function(productId) {
+    state.editingProductId = productId;
+    
+    const product = state.products.find(p => p.id === productId);
+    if (!product) return;
+    
+    if (productModalTitle) productModalTitle.textContent = 'Edit Product';
+    
+    // Fill form
+    const nameInput = document.getElementById('productName');
+    const descInput = document.getElementById('productDescription');
+    const priceInput = document.getElementById('productPrice');
+    const stockInput = document.getElementById('productStock');
+    const categoryInput = document.getElementById('productCategory');
+    const imageInput = document.getElementById('productImage');
+    
+    if (nameInput) nameInput.value = product.name || '';
+    if (descInput) descInput.value = product.description || '';
+    if (priceInput) priceInput.value = product.price || 0;
+    if (stockInput) stockInput.value = product.stock || 0;
+    if (categoryInput) categoryInput.value = product.category || '';
+    if (imageInput) imageInput.value = product.image || '';
+    
+    if (product.image && productImagePreview) {
+        productImagePreview.src = product.image;
+        productImagePreview.style.display = 'block';
+    }
+    
+    state.uploadedImageUrl = product.image || '';
+    
+    if (productModal) productModal.style.display = 'flex';
+}
+
+window.closeProductModal = function() {
+    if (productModal) productModal.style.display = 'none';
+    if (productForm) productForm.reset();
+    if (productImagePreview) productImagePreview.style.display = 'none';
+    state.editingProductId = null;
+    state.uploadedImageUrl = '';
+}
+
+// ============================================
+// Save Product (Create/Update)
+// ============================================
+
+async function handleSaveProduct() {
+    const nameInput = document.getElementById('productName');
+    const descInput = document.getElementById('productDescription');
+    const priceInput = document.getElementById('productPrice');
+    const stockInput = document.getElementById('productStock');
+    const categoryInput = document.getElementById('productCategory');
+    
+    const name = nameInput ? nameInput.value.trim() : '';
+    const description = descInput ? descInput.value.trim() : '';
+    const price = priceInput ? parseFloat(priceInput.value) : 0;
+    const stock = stockInput ? parseInt(stockInput.value) : 0;
+    const category = categoryInput ? categoryInput.value.trim() : '';
+    const image = state.uploadedImageUrl || '';
+    
+    if (!name || price <= 0) {
+        showToast('Please fill all required fields', 'error');
+        return;
+    }
+    
+    try {
+        if (saveProductBtn) {
+            saveProductBtn.disabled = true;
+            saveProductBtn.textContent = 'Saving...';
+        }
+        
+        const productData = {
+            name,
+            description,
+            price,
+            stock,
+            category,
+            image,
+            updatedAt: Timestamp.now()
+        };
+        
+        if (state.editingProductId) {
+            // Update existing
+            await updateDoc(doc(db, 'products', state.editingProductId), productData);
+            showToast('Product updated successfully', 'success');
+        } else {
+            // Create new
+            productData.createdAt = Timestamp.now();
+            await addDoc(collection(db, 'products'), productData);
+            showToast('Product added successfully', 'success');
+        }
+        
+        closeProductModal();
+        
+    } catch (error) {
+        console.error('❌ Save product error:', error);
+        showToast('Failed to save product', 'error');
+    } finally {
+        if (saveProductBtn) {
+            saveProductBtn.disabled = false;
+            saveProductBtn.textContent = 'Save Product';
+        }
+    }
+}
+
+// ============================================
+// Delete Product
+// ============================================
+
+window.deleteProduct = async function(productId) {
+    if (!confirm('Delete this product? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        await deleteDoc(doc(db, 'products', productId));
+        showToast('Product deleted successfully', 'success');
+    } catch (error) {
+        console.error('❌ Delete product error:', error);
+        showToast('Failed to delete product', 'error');
+    }
+}
+

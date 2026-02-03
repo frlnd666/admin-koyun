@@ -1039,3 +1039,271 @@ window.deleteProduct = async function(productId) {
     }
 }
 
+// ============================================
+// Render Staff List
+// ============================================
+
+function renderStaffList() {
+    if (!staffGrid) return;
+    
+    if (state.staff.length === 0) {
+        staffGrid.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">👥</div>
+                <p>Click "Add Staff" to add a kasir</p>
+            </div>
+        `;
+        return;
+    }
+    
+    staffGrid.innerHTML = state.staff.map(staff => `
+        <div class="staff-card">
+            <div class="staff-avatar">
+                <span>${staff.name ? staff.name.charAt(0).toUpperCase() : '👤'}</span>
+            </div>
+            
+            <div class="staff-info">
+                <h3>${staff.name}</h3>
+                <p class="staff-email">${staff.email}</p>
+                <span class="staff-role">Kasir</span>
+            </div>
+            
+            <div class="staff-status ${staff.active ? 'active' : 'inactive'}">
+                ${staff.active ? '✓ Active' : '✗ Inactive'}
+            </div>
+            
+            <div class="staff-actions">
+                <button onclick="editStaff('${staff.id}')" class="btn-edit">
+                    ✏️ Edit
+                </button>
+                <button onclick="toggleStaffStatus('${staff.id}', ${!staff.active})" 
+                        class="btn-toggle">
+                    ${staff.active ? '⏸️ Disable' : '▶️ Enable'}
+                </button>
+                <button onclick="deleteStaff('${staff.id}')" class="btn-delete">
+                    🗑️ Delete
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ============================================
+// Staff Modal Functions
+// ============================================
+
+function openAddStaffModal() {
+    state.editingStaffId = null;
+    
+    const staffModalTitle = document.getElementById('staffModalTitle');
+    if (staffModalTitle) staffModalTitle.textContent = 'Add New Staff';
+    
+    if (staffForm) staffForm.reset();
+    
+    // Show password field for new staff
+    const passwordField = document.getElementById('staffPasswordField');
+    if (passwordField) passwordField.style.display = 'block';
+    
+    if (staffModal) staffModal.style.display = 'flex';
+}
+
+window.editStaff = async function(staffId) {
+    state.editingStaffId = staffId;
+    
+    const staff = state.staff.find(s => s.id === staffId);
+    if (!staff) return;
+    
+    const staffModalTitle = document.getElementById('staffModalTitle');
+    if (staffModalTitle) staffModalTitle.textContent = 'Edit Staff';
+    
+    // Fill form
+    const nameInput = document.getElementById('staffName');
+    const emailInput = document.getElementById('staffEmail');
+    
+    if (nameInput) nameInput.value = staff.name || '';
+    if (emailInput) {
+        emailInput.value = staff.email || '';
+        emailInput.disabled = true; // Can't change email
+    }
+    
+    // Hide password field for edit
+    const passwordField = document.getElementById('staffPasswordField');
+    if (passwordField) passwordField.style.display = 'none';
+    
+    if (staffModal) staffModal.style.display = 'flex';
+}
+
+window.closeStaffModal = function() {
+    if (staffModal) staffModal.style.display = 'none';
+    if (staffForm) staffForm.reset();
+    
+    const emailInput = document.getElementById('staffEmail');
+    if (emailInput) emailInput.disabled = false;
+    
+    const passwordField = document.getElementById('staffPasswordField');
+    if (passwordField) passwordField.style.display = 'block';
+    
+    state.editingStaffId = null;
+}
+
+// ============================================
+// Save Staff (Create/Update) - ✅ FIXED VERSION
+// ============================================
+
+async function handleSaveStaff() {
+    const nameInput = document.getElementById('staffName');
+    const emailInput = document.getElementById('staffEmail');
+    const passwordInput = document.getElementById('staffPassword');
+    
+    const name = nameInput ? nameInput.value.trim() : '';
+    const email = emailInput ? emailInput.value.trim() : '';
+    const password = passwordInput ? passwordInput.value : '';
+    
+    if (!name || !email) {
+        showToast('Please fill all required fields', 'error');
+        return;
+    }
+    
+    if (!state.editingStaffId && !password) {
+        showToast('Password is required for new staff', 'error');
+        return;
+    }
+    
+    if (password && password.length < 6) {
+        showToast('Password must be at least 6 characters', 'error');
+        return;
+    }
+    
+    try {
+        if (saveStaffBtn) {
+            saveStaffBtn.disabled = true;
+            saveStaffBtn.textContent = 'Saving...';
+        }
+        
+        if (state.editingStaffId) {
+            // ✅ UPDATE EXISTING STAFF (only name, can't change email/password)
+            await updateDoc(doc(db, 'users', state.editingStaffId), {
+                name,
+                updatedAt: Timestamp.now()
+            });
+            
+            showToast('Staff updated successfully', 'success');
+            closeStaffModal();
+            
+        } else {
+            // ✅ CREATE NEW STAFF - FIXED VERSION (NO INFINITE LOOP)
+            
+            // Check if email already exists
+            console.log('🔍 Checking if email already exists...');
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where('email', '==', email));
+            const querySnapshot = await getDocs(q);
+            
+            if (!querySnapshot.empty) {
+                showToast('Email already registered', 'error');
+                return;
+            }
+            
+            console.log('🔐 Creating new staff account...');
+            
+            // Save current admin user info
+            const currentUser = auth.currentUser;
+            const currentUserEmail = currentUser.email;
+            
+            // Create new user (this will LOGOUT admin temporarily)
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            console.log('✅ New user created:', userCredential.user.uid);
+            
+            // Store staff data in Firestore
+            await setDoc(doc(db, 'users', userCredential.user.uid), {
+                email,
+                name,
+                role: 'kasir',
+                active: true,
+                createdAt: Timestamp.now(),
+                updatedAt: Timestamp.now()
+            });
+            
+            console.log('✅ Staff data saved to Firestore');
+            
+            // ⚠️ CRITICAL FIX: Logout the newly created user
+            await signOut(auth);
+            console.log('🔄 Logged out new user, preparing to reload...');
+            
+            // Show success message before reload
+            showToast('Staff created! Reloading dashboard...', 'success');
+            
+            // ✅ FORCE RELOAD to re-authenticate admin
+            // This will trigger onAuthStateChanged and admin will login again
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+            
+            return; // Stop execution
+        }
+        
+    } catch (error) {
+        console.error('❌ Save staff error:', error);
+        
+        if (error.code === 'auth/email-already-in-use') {
+            showToast('Email already in use', 'error');
+        } else if (error.code === 'auth/weak-password') {
+            showToast('Password should be at least 6 characters', 'error');
+        } else if (error.code === 'auth/invalid-email') {
+            showToast('Invalid email format', 'error');
+        } else {
+            showToast('Failed to save staff: ' + error.message, 'error');
+        }
+    } finally {
+        if (saveStaffBtn) {
+            saveStaffBtn.disabled = false;
+            saveStaffBtn.textContent = 'Save Staff';
+        }
+    }
+}
+
+// ============================================
+// Toggle Staff Status (Enable/Disable)
+// ============================================
+
+window.toggleStaffStatus = async function(staffId, newStatus) {
+    const action = newStatus ? 'enable' : 'disable';
+    
+    if (!confirm(`Are you sure you want to ${action} this staff member?`)) {
+        return;
+    }
+    
+    try {
+        await updateDoc(doc(db, 'users', staffId), {
+            active: newStatus,
+            updatedAt: Timestamp.now()
+        });
+        
+        showToast(`Staff ${action}d successfully`, 'success');
+    } catch (error) {
+        console.error('❌ Toggle staff status error:', error);
+        showToast('Failed to update staff status', 'error');
+    }
+}
+
+// ============================================
+// Delete Staff
+// ============================================
+
+window.deleteStaff = async function(staffId) {
+    if (!confirm('Delete this staff member? This will remove their account permanently.')) {
+        return;
+    }
+    
+    try {
+        // Note: This only deletes from Firestore, not from Firebase Auth
+        // For full deletion, you need Firebase Admin SDK or Cloud Functions
+        await deleteDoc(doc(db, 'users', staffId));
+        showToast('Staff deleted from database', 'success');
+        
+        console.warn('⚠️ Note: User still exists in Firebase Auth. Use Firebase Console to fully delete.');
+    } catch (error) {
+        console.error('❌ Delete staff error:', error);
+        showToast('Failed to delete staff', 'error');
+    }
+}

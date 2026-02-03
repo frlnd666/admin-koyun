@@ -1643,3 +1643,393 @@ function renderTopProducts() {
         </div>
     `).join('');
 }
+
+// ============================================
+// Export Functions
+// ============================================
+
+function handleExportExcel() {
+    const period = reportPeriod ? reportPeriod.value : 'all';
+    const orders = getOrdersByPeriod(period);
+    
+    if (orders.length === 0) {
+        showToast('No data to export', 'error');
+        return;
+    }
+    
+    // Create Excel-compatible CSV with BOM for UTF-8
+    const BOM = '\uFEFF';
+    let csv = BOM + 'Date,Table,Items,Total,Payment,Status\n';
+    
+    orders.forEach(order => {
+        const date = order.createdAt ? order.createdAt.toDate().toLocaleString('id-ID') : '';
+        const items = order.items ? order.items.map(i => `${i.quantity}x ${i.name}`).join('; ') : '';
+        const total = order.total || 0;
+        const payment = order.paymentMethod || 'cash';
+        const status = order.status || 'pending';
+        
+        csv += `"${date}","Table ${order.tableNumber}","${items}",${total},"${payment}","${status}"\n`;
+    });
+    
+    downloadFile(csv, `koyun-report-${period}-${Date.now()}.csv`, 'text/csv;charset=utf-8;');
+    showToast('Excel report downloaded', 'success');
+}
+
+function handleExportCSV() {
+    const period = reportPeriod ? reportPeriod.value : 'all';
+    const orders = getOrdersByPeriod(period);
+    
+    if (orders.length === 0) {
+        showToast('No data to export', 'error');
+        return;
+    }
+    
+    let csv = 'Date,Table,Items,Total,Payment,Status\n';
+    
+    orders.forEach(order => {
+        const date = order.createdAt ? order.createdAt.toDate().toLocaleString('id-ID') : '';
+        const items = order.items ? order.items.map(i => `${i.quantity}x ${i.name}`).join('; ') : '';
+        const total = order.total || 0;
+        const payment = order.paymentMethod || 'cash';
+        const status = order.status || 'pending';
+        
+        csv += `"${date}","Table ${order.tableNumber}","${items}",${total},"${payment}","${status}"\n`;
+    });
+    
+    downloadFile(csv, `koyun-report-${period}-${Date.now()}.csv`, 'text/csv');
+    showToast('CSV report downloaded', 'success');
+}
+
+function handleExportPDF() {
+    const period = reportPeriod ? reportPeriod.value : 'all';
+    const orders = getOrdersByPeriod(period);
+    
+    if (orders.length === 0) {
+        showToast('No data to export', 'error');
+        return;
+    }
+    
+    // Create HTML report that can be printed as PDF
+    const totalOrders = orders.length;
+    const completedOrders = orders.filter(o => o.status === 'completed').length;
+    const totalRevenue = orders
+        .filter(o => o.status === 'completed')
+        .reduce((sum, o) => sum + (o.total || 0), 0);
+    
+    const reportHTML = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>KoYun Sales Report</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; }
+                h1 { color: #6F4E37; }
+                .header { margin-bottom: 30px; }
+                .stats { display: flex; gap: 20px; margin: 20px 0; }
+                .stat-card { padding: 15px; background: #f3f4f6; border-radius: 8px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+                th { background: #6F4E37; color: white; }
+                tr:hover { background: #f9fafb; }
+                .status-completed { color: #10b981; font-weight: bold; }
+                .status-processing { color: #3b82f6; font-weight: bold; }
+                .status-pending { color: #f59e0b; font-weight: bold; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>☕ KoYun Coffee</h1>
+                <h2>Sales Report - ${formatPeriodName(period)}</h2>
+                <p>Generated: ${new Date().toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' })}</p>
+            </div>
+            
+            <div class="stats">
+                <div class="stat-card">
+                    <h3>Total Orders</h3>
+                    <p style="font-size: 24px; margin: 0;">${totalOrders}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Completed Orders</h3>
+                    <p style="font-size: 24px; margin: 0;">${completedOrders}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Revenue</h3>
+                    <p style="font-size: 24px; margin: 0;">Rp ${totalRevenue.toLocaleString('id-ID')}</p>
+                </div>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Table</th>
+                        <th>Items</th>
+                        <th>Total</th>
+                        <th>Payment</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${orders.map(order => {
+                        const date = order.createdAt ? order.createdAt.toDate() : new Date();
+                        const items = order.items ? order.items.map(i => `${i.quantity}x ${i.name}`).join(', ') : '';
+                        return `
+                            <tr>
+                                <td>${date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                                <td>Table ${order.tableNumber}</td>
+                                <td>${items}</td>
+                                <td>Rp ${order.total.toLocaleString('id-ID')}</td>
+                                <td>${order.paymentMethod || 'cash'}</td>
+                                <td class="status-${order.status}">${order.status}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        </body>
+        </html>
+    `;
+    
+    // Open in new window for printing
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(reportHTML);
+    printWindow.document.close();
+    
+    setTimeout(() => {
+        printWindow.print();
+    }, 500);
+    
+    showToast('PDF report opened in new window', 'success');
+}
+
+// ============================================
+// Helper Functions
+// ============================================
+
+function getOrdersByPeriod(period) {
+    const now = new Date();
+    let startDate;
+    
+    switch(period) {
+        case 'today':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            break;
+        case 'week':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+            break;
+        case 'month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+        case 'year':
+            startDate = new Date(now.getFullYear(), 0, 1);
+            break;
+        default: // 'all'
+            return state.orders;
+    }
+    
+    return state.orders.filter(order => {
+        if (!order.createdAt) return false;
+        const orderDate = order.createdAt.toDate();
+        return orderDate >= startDate;
+    });
+}
+
+function formatPeriodName(period) {
+    const names = {
+        'today': "Today's Report",
+        'week': 'Last 7 Days',
+        'month': 'This Month',
+        'year': 'This Year',
+        'all': 'All Time'
+    };
+    return names[period] || 'Custom Period';
+}
+
+function downloadFile(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+// ============================================
+// Image Modal
+// ============================================
+
+window.showImageModal = function(imageUrl) {
+    if (!imageModal || !modalImage) return;
+    
+    modalImage.src = imageUrl;
+    imageModal.style.display = 'flex';
+}
+
+window.closeImageModal = function() {
+    if (imageModal) imageModal.style.display = 'none';
+}
+
+// Close modals on outside click
+if (imageModal) {
+    imageModal.addEventListener('click', (e) => {
+        if (e.target === imageModal) closeImageModal();
+    });
+}
+
+if (productModal) {
+    productModal.addEventListener('click', (e) => {
+        if (e.target === productModal) closeProductModal();
+    });
+}
+
+if (staffModal) {
+    staffModal.addEventListener('click', (e) => {
+        if (e.target === staffModal) closeStaffModal();
+    });
+}
+
+if (expenseModal) {
+    expenseModal.addEventListener('click', (e) => {
+        if (e.target === expenseModal) closeExpenseModal();
+    });
+}
+
+// ============================================
+// Logout Handler
+// ============================================
+
+async function handleLogout() {
+    if (!confirm('Are you sure you want to logout?')) {
+        return;
+    }
+    
+    try {
+        // Unsubscribe from all listeners
+        if (state.unsubscribeOrders) state.unsubscribeOrders();
+        if (state.unsubscribeProducts) state.unsubscribeProducts();
+        if (state.unsubscribeStaff) state.unsubscribeStaff();
+        if (state.unsubscribeExpenses) state.unsubscribeExpenses();
+        
+        await signOut(auth);
+        console.log('✅ Logged out successfully');
+        window.location.href = '/admin.html';
+    } catch (error) {
+        console.error('❌ Logout error:', error);
+        showToast('Failed to logout', 'error');
+    }
+}
+
+// ============================================
+// Time Display
+// ============================================
+
+function updateTime() {
+    if (!currentTime) return;
+    
+    const now = new Date();
+    const timeString = now.toLocaleString('id-ID', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+    
+    currentTime.textContent = timeString;
+}
+
+// ============================================
+// Toast Notification
+// ============================================
+
+function showToast(message, type = 'info') {
+    // Remove existing toasts
+    const existingToasts = document.querySelectorAll('.toast');
+    existingToasts.forEach(toast => toast.remove());
+    
+    // Create toast
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    
+    const icon = {
+        'success': '✓',
+        'error': '✗',
+        'warning': '⚠',
+        'info': 'ℹ'
+    }[type] || 'ℹ';
+    
+    toast.innerHTML = `
+        <span class="toast-icon">${icon}</span>
+        <span class="toast-message">${message}</span>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Animate in
+    setTimeout(() => toast.classList.add('show'), 10);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// ============================================
+// Keyboard Shortcuts
+// ============================================
+
+document.addEventListener('keydown', (e) => {
+    // ESC to close modals
+    if (e.key === 'Escape') {
+        closeImageModal();
+        closeProductModal();
+        closeStaffModal();
+        closeExpenseModal();
+    }
+    
+    // Ctrl/Cmd + R to refresh (prevent default and use custom refresh)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+        e.preventDefault();
+        if (refreshBtn) refreshBtn.click();
+    }
+});
+
+// ============================================
+// Window Visibility Change (Auto Refresh)
+// ============================================
+
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        // Refresh data when user returns to tab
+        console.log('👁️ Tab visible again, data auto-synced via real-time listeners');
+    }
+});
+
+// ============================================
+// Console Welcome Message
+// ============================================
+
+console.log(`
+%c
+╔═══════════════════════════════════════╗
+║   ☕ KoYun Coffee Admin Dashboard    ║
+║   Version: 3.0 FIXED                  ║
+║   Status: ✅ All Systems Running      ║
+║   Bug Fixed: Infinite Reload Loop     ║
+╚═══════════════════════════════════════╝
+`, 'color: #6F4E37; font-weight: bold; font-size: 12px;');
+
+console.log('%c✅ Admin Dashboard V3.0 loaded successfully!', 'color: #10b981; font-weight: bold;');
+console.log('%c🔧 Staff creation bug FIXED - no more infinite loop', 'color: #3b82f6; font-weight: bold;');
+console.log('%c📊 All features active: Orders, Products, Staff, Expenses, Analytics', 'color: #8b5cf6; font-weight: bold;');
+
+// ============================================
+// END OF FILE - admin.js V3.0 FIXED
+// ============================================
